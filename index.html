@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Handwriting Viewer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<div id="formatModal" class="modal hidden">
+    <div class="modalBox">
+        <h3>Multiple data formats found</h3>
+        <p>Select which files you want to load:</p>
+
+        <div id="formatModalButtons"></div>
+
+        <div class="modalActions">
+            <button id="formatModalCancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<body>
+    <div id="fileOverlay">
+        <div id="loadMessage">
+            <p>Click Open to load a data set.</p>
+            <p id="acceptedFormats">Accepted data formats: json, csv, txt</p>
+
+            <div class="openButtons">
+                <button id="openFileBtn">Open File</button>
+                <button id="openFolderBtn">Open Folder</button>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="titleBar" class="hiddenUntilData"></div>
+
+    <div id="appContainer" class="hiddenUntilData">
+        <canvas id="xyCanvas"></canvas>
+        <canvas id="timeCanvas"></canvas>
+        <canvas id="settingsCanvas"></canvas>
+    </div>
+
+    <script src="app.bundle.js"></script>
+</body>
+</html>
