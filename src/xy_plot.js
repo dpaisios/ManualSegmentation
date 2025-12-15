@@ -4,7 +4,7 @@
 // Everything receives data + context as function arguments.
 // -------------------------------------------------------------
 
-import { arrayMin, arrayMax } from "./utils/stats_utils.js";
+import { arrayMin, arrayMax } from "./stats_utils.js";
 
 // Compute XY transform for scaling + centering
 export function computeXYTransform(X, Y, visibleIdxs, canvasWidth, canvasHeight) {

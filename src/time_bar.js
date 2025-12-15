@@ -4,7 +4,7 @@
 // -------------------------------------------------------------
 
 import { isEditingSelection } from "./label_editor.js";
-import { quantile } from "./utils/stats_utils.js";
+import { quantile } from "./stats_utils.js";
 
 // -------------------------------------------------------------
 // Time tick helpers

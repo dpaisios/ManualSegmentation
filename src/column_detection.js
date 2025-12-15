@@ -10,7 +10,7 @@
 //   timeNormalization(data)
 // -------------------------------------------------------------
 
-import { arrayMin, arrayMax, mean, sd, median, quantile, linSlope, linR2 } from "./utils/stats_utils.js";
+import { arrayMin, arrayMax, mean, sd, median, quantile, linSlope, linR2 } from "./stats_utils.js";
 
 // ---------- run-length IDs ----------
 function rleidJS(arr) {
