@@ -7,23 +7,6 @@ export function clamp(x, min, max) {
     return Math.max(min, Math.min(max, x));
 }
 
-export function distance(x1, y1, x2, y2) {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    return Math.sqrt(dx * dx + dy * dy);
-}
-
-export function lerp(a, b, t) {
-    return a + t * (b - a);
-}
-
-// map value from [a,b] to [c,d]
-export function mapRange(x, a, b, c, d) {
-    if (b === a) return c;
-    const t = (x - a) / (b - a);
-    return c + t * (d - c);
-}
-
 export function computeTimeRangesFromXYBox({
     box,
     X, Y, T,

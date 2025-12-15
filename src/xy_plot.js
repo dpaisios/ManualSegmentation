@@ -4,18 +4,7 @@
 // Everything receives data + context as function arguments.
 // -------------------------------------------------------------
 
-// Helpers
-function arrayMin(arr) {
-    let m = Infinity;
-    for (const v of arr) if (v < m) m = v;
-    return m;
-}
-
-function arrayMax(arr) {
-    let m = -Infinity;
-    for (const v of arr) if (v > m) m = v;
-    return m;
-}
+import { arrayMin, arrayMax } from "./utils/stats_utils.js";
 
 // Compute XY transform for scaling + centering
 export function computeXYTransform(X, Y, visibleIdxs, canvasWidth, canvasHeight) {

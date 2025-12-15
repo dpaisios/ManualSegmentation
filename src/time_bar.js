@@ -4,19 +4,7 @@
 // -------------------------------------------------------------
 
 import { isEditingSelection } from "./label_editor.js";
-
-// -------------------------------------------------------------
-// Statistics helpers (for dt-based gap detection)
-// -------------------------------------------------------------
-function quantile(arr, p) {
-    const a = [...arr].sort((x, y) => x - y);
-    const pos = (a.length - 1) * p;
-    const base = Math.floor(pos);
-    const rest = pos - base;
-    return a[base + 1] !== undefined
-        ? a[base] + rest * (a[base + 1] - a[base])
-        : a[base];
-}
+import { quantile } from "./utils/stats_utils.js";
 
 // -------------------------------------------------------------
 // Time tick helpers
@@ -259,7 +247,7 @@ export function hitTestHandleRect(
         yClick >= yMin && yClick <= yMax
     );
 }
-
+/**
 export function hitTestSelectionHover(
     x, y,
     selections, T,
@@ -276,7 +264,7 @@ export function hitTestSelectionHover(
     }
     return null;
 }
-
+*/
 // ID label rect (used also by app.js for DOM input)
 export function getLabelRect(ctx, sel, T, W, H) {
     const cluster = computeClusterLayout(ctx, sel, T, W, H);

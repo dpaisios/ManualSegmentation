@@ -1,7 +1,7 @@
 // -------------------------------------------------------------
 // selection_manager.js — faithful to your original app
 // -------------------------------------------------------------
-
+/**
 // Create a new selection
 export function createSelection(tStart, tEnd) {
     const t0 = Math.min(tStart, tEnd);
@@ -19,7 +19,7 @@ export function createSelection(tStart, tEnd) {
 export function addSelection(sel, selections) {
     return [...selections, sel];
 }
-
+*/
 // Delete by reference — identical to original app.js
 export function deleteSelection(target, selections) {
     return selections.filter(s => s !== target);

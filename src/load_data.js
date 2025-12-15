@@ -23,7 +23,7 @@ import { AppState } from "./app_state.js";
 export let detectedCols = null;
 export let originalRaw = null;          // TRUE original, immutable
 export let X = [], Y = [], T = [], Tip = [], TipSeg = [];
-export let exportDataBuffer = [];
+//export let exportDataBuffer = [];
 export let exportPathOverrideGlobal = null;
 
 // -------------------------------------------------------------
@@ -141,7 +141,7 @@ export function loadData(
     // ---------------------------------------------------------
     // Processed data buffer (used for export)
     // ---------------------------------------------------------
-    exportDataBuffer = data;
+//    exportDataBuffer = data;
 
     // ---------------------------------------------------------
     // Sync AppState (single source of truth)
@@ -153,7 +153,7 @@ export function loadData(
     AppState.TipSeg = TipSeg;
     AppState.detectedCols = detectedCols;
     AppState.originalRaw = originalRaw;   // TRUE original
-    AppState.exportDataBuffer = exportDataBuffer;
+//    AppState.exportDataBuffer = exportDataBuffer;
 }
 
 // -------------------------------------------------------------
@@ -162,7 +162,7 @@ export function loadData(
 export function resetLoaderState() {
     detectedCols = null;
     originalRaw = null;
-    exportDataBuffer = [];
+//    exportDataBuffer = [];
     X.length = 0;
     Y.length = 0;
     T.length = 0;
