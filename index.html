@@ -29,11 +29,20 @@
                 <button id="openFileBtn">Open File</button>
                 <button id="openFolderBtn">Open Folder</button>
             </div>
-
         </div>
     </div>
 
-    <div id="titleBar" class="hiddenUntilData"></div>
+    <!-- TITLE BAR -->
+    <div id="titleBar" class="hiddenUntilData">
+        <div class="title-left">
+            <span class="dropdown-arrow">▾</span>
+            <span class="title-label"></span>
+        </div>
+
+        <div class="title-nav">
+            <!-- buttons are injected by JS -->
+        </div>
+    </div>
 
     <div id="appContainer" class="hiddenUntilData">
         <canvas id="xyCanvas"></canvas>

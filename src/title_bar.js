@@ -8,24 +8,41 @@ export function attachTitleBar({
     AppState
 }) {
     let fileDropdown = null;
-    let lifecycle = null; // <-- MUTABLE reference
+    let lifecycle = null;
+
+    const left  = titleBarEl.querySelector(".title-left");
+    const label = titleBarEl.querySelector(".title-label");
+    const arrow = titleBarEl.querySelector(".dropdown-arrow");
+    const nav   = titleBarEl.querySelector(".title-nav");
+
+    let prevBtn = null;
+
+    // ---------------------------------------------------------
+    // Dropdown hit zone (visual + logical)
+    // ---------------------------------------------------------
+    const hitZone = document.createElement("div");
+    hitZone.className = "dropdownHitZone";
+    titleBarEl.appendChild(hitZone);
 
     function setLifecycle(lc) {
         lifecycle = lc;
     }
 
     function updateTitleBar() {
-        titleBarEl.innerHTML = "";
-
-        if (!AppState.dataLoaded) return;
-
-        // ---------------- File mode ----------------
-        if (!AppState.fileList || AppState.fileList.length === 0) {
-            titleBarEl.textContent = AppState.originalFileName ?? "";
+        if (!AppState.dataLoaded) {
+            titleBarEl.style.display = "none";
             return;
         }
 
-        // ---------------- Folder mode ----------------
+        titleBarEl.style.display = "flex";
+        label.textContent = AppState.originalFileName ?? "";
+
+        nav.innerHTML = "";
+        prevBtn = null;
+
+        if (!AppState.fileList || AppState.fileList.length === 0) return;
+
+        // PREV
         const prev = document.createElement("button");
         prev.innerHTML = `
             <svg width="14" height="14" viewBox="0 0 24 24">
@@ -37,6 +54,7 @@ export function attachTitleBar({
         prev.disabled = AppState.fileIndex <= 0;
         prev.onclick = () => lifecycle?.prevFile();
 
+        // NEXT
         const next = document.createElement("button");
         next.innerHTML = `
             <svg width="14" height="14" viewBox="0 0 24 24">
@@ -49,59 +67,75 @@ export function attachTitleBar({
             AppState.fileIndex >= AppState.fileList.length - 1;
         next.onclick = () => lifecycle?.nextFile();
 
-        const label = document.createElement("div");
-        label.style.flex = "1";
-        label.style.textAlign = "center";
-        label.style.overflow = "hidden";
-        label.style.whiteSpace = "nowrap";
-        label.style.textOverflow = "ellipsis";
-        label.style.cursor = "pointer";
-        label.textContent = AppState.originalFileName ?? "";
+        nav.append(prev, next);
+        prevBtn = prev;
 
-        label.onclick = e => {
-            e.stopPropagation();
-            toggleFileDropdown(label);
-        };
-
-        titleBarEl.append(prev, label, next);
+        updateHitZone();
     }
 
-    function toggleFileDropdown(anchor) {
-
-        if (fileDropdown) {
-            fileDropdown.remove();
-            fileDropdown = null;
+    function updateHitZone() {
+        if (!prevBtn) {
+            hitZone.classList.remove("active");
             return;
         }
 
-        if (!AppState.fileList || AppState.fileList.length === 0) return;
-        if (!lifecycle) return; // safety
+        const barRect  = titleBarEl.getBoundingClientRect();
+        const leftRect = left.getBoundingClientRect();
+        const prevRect = prevBtn.getBoundingClientRect();
 
-        const r = anchor.getBoundingClientRect();
+        const x0 = leftRect.left - barRect.left;
+        const w  = prevRect.left - leftRect.left;
+
+        if (w <= 0) {
+            hitZone.classList.remove("active");
+            return;
+        }
+
+        hitZone.style.left  = `${x0}px`;
+        hitZone.style.width = `${w}px`;
+    }
+
+    function isInDropdownZone(clientX) {
+        if (!prevBtn) return false;
+
+        const leftRect = left.getBoundingClientRect();
+        const prevRect = prevBtn.getBoundingClientRect();
+
+        return (
+            clientX >= leftRect.left &&
+            clientX <= (prevRect.left)
+        );
+    }
+
+    function closeDropdown() {
+        if (!fileDropdown) return;
+        fileDropdown.remove();
+        fileDropdown = null;
+        arrow.classList.remove("open");
+    }
+
+    function toggleFileDropdown() {
+        if (fileDropdown) {
+            closeDropdown();
+            return;
+        }
+
+        if (!AppState.fileList || !lifecycle) return;
+
+        const leftRect = left.getBoundingClientRect();
+        const navRect  = nav.getBoundingClientRect();
 
         fileDropdown = document.createElement("div");
         fileDropdown.className = "fileDropdown";
-        fileDropdown.style.left = `${r.left}px`;
-        fileDropdown.style.top  = `${r.bottom + 4}px`;
 
-        // Measure longest filename
-        const measurer = document.createElement("span");
-        measurer.style.visibility = "hidden";
-        measurer.style.position = "absolute";
-        measurer.style.whiteSpace = "nowrap";
-        measurer.style.font = getComputedStyle(anchor).font;
-        document.body.appendChild(measurer);
+        fileDropdown.style.left = `${leftRect.left}px`;
+        fileDropdown.style.top  = `${leftRect.bottom + 4}px`;
 
-        let maxW = 0;
-        for (const fullPath of AppState.fileList) {
-            measurer.textContent = fullPath.split(/[/\\]/).pop();
-            maxW = Math.max(maxW, measurer.offsetWidth);
-        }
-        document.body.removeChild(measurer);
+        const maxWidth =
+            Math.max(160, navRect.left - leftRect.left);
 
-        fileDropdown.style.width = `${Math.min(maxW + 24, 480)}px`;
+        fileDropdown.style.width = `${maxWidth}px`;
 
-        // Items
         AppState.fileList.forEach((fullPath, idx) => {
             const item = document.createElement("div");
             item.className = "fileDropdownItem";
@@ -111,29 +145,28 @@ export function attachTitleBar({
                 item.classList.add("active");
             }
 
-            item.addEventListener("click", e => {
+            item.onclick = e => {
                 e.stopPropagation();
-
-                fileDropdown.remove();
-                fileDropdown = null;
-
-                if (idx === AppState.fileIndex) return;
-                lifecycle.loadFileAtIndex(idx); // ✅ now works
-            });
+                closeDropdown();
+                if (idx !== AppState.fileIndex) {
+                    lifecycle.loadFileAtIndex(idx);
+                }
+            };
 
             fileDropdown.appendChild(item);
         });
 
         document.body.appendChild(fileDropdown);
+        arrow.classList.add("open");
 
         const onDocMouseDown = e => {
+            if (isInDropdownZone(e.clientX)) return;
+
             if (
                 fileDropdown &&
-                !fileDropdown.contains(e.target) &&
-                !anchor.contains(e.target)
+                !fileDropdown.contains(e.target)
             ) {
-                fileDropdown.remove();
-                fileDropdown = null;
+                closeDropdown();
                 document.removeEventListener("mousedown", onDocMouseDown, true);
             }
         };
@@ -142,6 +175,33 @@ export function attachTitleBar({
             document.addEventListener("mousedown", onDocMouseDown, true);
         }, 0);
     }
+
+    // ---------------------------------------------------------
+    // Hover + click logic
+    // ---------------------------------------------------------
+
+    titleBarEl.addEventListener("mousemove", e => {
+        if (isInDropdownZone(e.clientX)) {
+            updateHitZone();
+            hitZone.classList.add("active");
+        } else {
+            hitZone.classList.remove("active");
+        }
+    });
+
+    titleBarEl.addEventListener("mouseleave", () => {
+        hitZone.classList.remove("active");
+    });
+
+    titleBarEl.addEventListener("mousedown", e => {
+        if (!AppState.fileList) return;
+
+        if (isInDropdownZone(e.clientX)) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleFileDropdown();
+        }
+    });
 
     return {
         updateTitleBar,
