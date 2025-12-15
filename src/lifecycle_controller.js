@@ -88,7 +88,7 @@ export function attachLifecycleController({
     }
 
     // ---------------------------------------------------------
-    // LOAD FILE IN DROPDOWN LIST
+    // LOAD FILE BY INDEX (FOLDER SESSION MODE)
     // ---------------------------------------------------------
     async function loadFileAtIndex(idx) {
         if (!AppState.fileList) return;
@@ -97,42 +97,17 @@ export function attachLifecycleController({
         // --- UNSAVED SELECTION GUARD ---
         if (AppState.selections && AppState.selections.length > 0) {
             const ok = window.confirm(
-                "You have unexported selections.\n\n" +
-                "Changing file will discard them.\n\n" +
+                "You have unexported selections.\n" +
+                "Loading another file will discard them\n\n" +
                 "Do you want to continue?"
             );
             if (!ok) return;
         }
 
-        const filePath = AppState.fileList[idx];
-
         resetForNewFile();
 
+        const filePath = AppState.fileList[idx];
         const txt  = await window.electronAPI.readFile(filePath);
-        const rows = parseData(txt, filePath);
-
-        loadData(rows, null, null, settingsOptions);
-
-        AppState.fileIndex = idx;
-        AppState.originalFileName = filePath.split(/[/\\]/).pop();
-        AppState.dataLoaded = true;
-
-        setTitle(AppState.originalFileName);
-        hideOverlay();
-        renderers.redrawAll();
-    }
-
-    // ---------------------------------------------------------
-    // LOAD FILE BY INDEX (FOLDER SESSION MODE)
-    // ---------------------------------------------------------
-    async function loadFileAtIndex(idx) {
-        if (!AppState.fileList) return;
-        if (idx < 0 || idx >= AppState.fileList.length) return;
-
-        resetForNewFile();
-
-        const filePath = AppState.fileList[idx];
-        const txt = await window.electronAPI.readFile(filePath);
         const rows = parseData(txt, filePath);
 
         loadData(rows, null, null, settingsOptions);
@@ -334,24 +309,6 @@ export function attachLifecycleController({
         loadFileAtIndex(AppState.fileIndex - 1);
     }
 
-    function gotoFileIndex(idx) {
-        if (!AppState.fileList) return;
-        if (idx < 0 || idx >= AppState.fileList.length) return;
-
-        const cur = AppState.fileIndex;
-        if (idx === cur) return;
-
-        // move step by step so we reuse existing logic
-        if (idx > cur) {
-            for (let i = cur + 1; i <= idx; i++) {
-                nextFile();
-            }
-        } else {
-            for (let i = cur - 1; i >= idx; i--) {
-                prevFile();
-            }
-        }
-    }
     // ---------------------------------------------------------
     // PUBLIC API
     // ---------------------------------------------------------
