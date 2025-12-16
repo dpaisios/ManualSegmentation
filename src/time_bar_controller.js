@@ -7,6 +7,7 @@ import * as TB from "./time_bar.js";
 import * as Select from "./selection_manager.js";
 import * as ID from "./selection_ids.js";
 import { isEditingSelection } from "./label_editor.js";
+import { clamp } from "./geometry.js";
 
 export function attachTimeBarController({
     canvas,
@@ -45,10 +46,6 @@ export function attachTimeBarController({
     // ---------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------
-    function clamp(v, lo, hi) {
-        return Math.max(lo, Math.min(hi, v));
-    }
-
     function haveData() {
         return !!getDataLoaded?.() && Array.isArray(T) && T.length > 1;
     }
@@ -91,6 +88,103 @@ export function attachTimeBarController({
     function clearHoverState() {
         hoveredHandle = null;
         deleteTarget  = null;
+    }
+
+    // ---------------------------------------------------------
+    // NEW: external selection creation with overlap policy
+    // ---------------------------------------------------------
+    function makeSelectionObject(t0, t1) {
+        return {
+            t0,
+            t1,
+            id: null,
+            lockedID: false,
+            bubbleAlpha: 0
+        };
+    }
+
+    // overlap test (strict enough for your use; inclusive boundaries are fine)
+    function overlaps(a0, a1, b0, b1) {
+        return a1 > b0 && a0 < b1;
+    }
+
+    // If [t0,t1] is fully inside sel -> "contained"
+    function containedIn(sel, t0, t1) {
+        return t0 >= sel.t0 && t1 <= sel.t1;
+    }
+
+    // Main entry: add or merge a single range into selections
+    function addOrMergeSelectionRange(tStart, tEnd) {
+        const t0 = Math.min(tStart, tEnd);
+        const t1 = Math.max(tStart, tEnd);
+        if (!(t1 > t0)) return;
+
+        const selections = getSelections() || [];
+
+        // 1) If fully contained in any existing selection => do nothing
+        for (const sel of selections) {
+            if (containedIn(sel, t0, t1)) {
+                // still ensure IDs are coherent (safe no-op)
+                ID.recomputeAutoIDs(selections);
+                setSelections(selections);
+                redrawTimeBar();
+                redrawXY();
+                return;
+            }
+        }
+
+        // 2) Find all overlaps
+        const overlapping = [];
+        for (const sel of selections) {
+            if (overlaps(t0, t1, sel.t0, sel.t1) || containedIn({ t0, t1 }, sel.t0, sel.t1)) {
+                overlapping.push(sel);
+            }
+        }
+
+        if (overlapping.length === 0) {
+            // 3) No overlap => create fresh selection with full fields
+            const next = [...selections, makeSelectionObject(t0, t1)];
+            ID.recomputeAutoIDs(next);
+            setSelections(next);
+            redrawTimeBar();
+            redrawXY();
+            return;
+        }
+
+        // 4) Overlap exists => extend/merge into one "primary" selection object
+        // Choose primary = the one with smallest t0 (stable/expected)
+        overlapping.sort((a, b) => (a.t0 - b.t0) || (a.t1 - b.t1));
+        const primary = overlapping[0];
+
+        let merged0 = Math.min(primary.t0, t0);
+        let merged1 = Math.max(primary.t1, t1);
+
+        for (let i = 1; i < overlapping.length; i++) {
+            merged0 = Math.min(merged0, overlapping[i].t0);
+            merged1 = Math.max(merged1, overlapping[i].t1);
+        }
+
+        primary.t0 = merged0;
+        primary.t1 = merged1;
+
+        // Remove other overlapping selections (they are now subsumed)
+        const next = selections.filter(s => s === primary || !overlapping.includes(s));
+
+        ID.recomputeAutoIDs(next);
+        setSelections(next);
+        redrawTimeBar();
+        redrawXY();
+    }
+
+    // Convenience for XY case: apply many ranges
+    function addOrMergeSelectionRanges(ranges) {
+        if (!Array.isArray(ranges) || ranges.length === 0) return;
+
+        // Apply sequentially; merges naturally converge
+        for (const r of ranges) {
+            if (!r) continue;
+            addOrMergeSelectionRange(r.t0, r.t1);
+        }
     }
 
     // ---------------------------------------------------------
@@ -481,19 +575,10 @@ export function attachTimeBarController({
         const selections = getSelections() || [];
 
         if (dragging && tempSelection && tempSelection.t1 > tempSelection.t0) {
-            const next = [
-                ...selections,
-                {
-                    t0: tempSelection.t0,
-                    t1: tempSelection.t1,
-                    id: null,
-                    lockedID: false,
-                    bubbleAlpha: 0
-                }
-            ];
-
-            ID.recomputeAutoIDs(next);
-            setSelections(next);
+            addOrMergeSelectionRange(
+                tempSelection.t0,
+                tempSelection.t1
+            );
         }
 
         clearDragState();
@@ -528,7 +613,6 @@ export function attachTimeBarController({
         redrawTimeBar();
     });
 
-
     return {
         state: {
             get hoveredHandle() { return hoveredHandle; },
@@ -541,6 +625,10 @@ export function attachTimeBarController({
                 }
                 return null;
             }
-        }
+        },
+
+        // NEW API (for XY validation or any external creation path)
+        addOrMergeSelectionRange,
+        addOrMergeSelectionRanges
     };
 }

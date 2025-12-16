@@ -187,10 +187,19 @@ const timeBarController = attachTimeBarController({
     redrawXY: () => renderers.redrawXY()
 });
 
+// NEW: single “authority” entry point for committing XY ranges
+function commitXYRangesToTimeBar(ranges) {
+    timeBarController.addOrMergeSelectionRanges(ranges);
+}
+
 const xyController = attachXYController({
     canvas: xyCanvas,
     AppState,
     renderers,
+
+    // NEW: used by XY validate bubble to create/merge *real* time selections
+    commitTimeRanges: commitXYRangesToTimeBar,
+
     computeTimeRangesFromXYBox: box => {
         const visibleIndices = visibility.getVisibleIndices(X.length);
 

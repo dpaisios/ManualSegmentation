@@ -189,7 +189,36 @@ export function drawXYFromSelections(
 }
 
 // -------------------------------------------------------------
-// XY selection box with hover highlighting
+// Confirm bubble helper
+// -------------------------------------------------------------
+function drawConfirmBubble(ctx, cx, cy, r) {
+    ctx.save();
+
+    ctx.shadowColor = "rgba(0,0,0,0.25)";
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 2;
+
+    ctx.fillStyle = "rgb(46, 204, 113)";
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.shadowColor = "transparent";
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = "round";
+
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.45, cy);
+    ctx.lineTo(cx - r * 0.1,  cy + r * 0.35);
+    ctx.lineTo(cx + r * 0.45, cy - r * 0.35);
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+// -------------------------------------------------------------
+// XY selection box with hover + commit bubble
 // -------------------------------------------------------------
 export function drawXYSelectionBox(ctx, box, W, H) {
     if (!box) return;
@@ -201,83 +230,60 @@ export function drawXYSelectionBox(ctx, box, W, H) {
 
     ctx.save();
 
-    // -------------------------------
-    // Dim outside the rectangle
-    // -------------------------------
+    // Dim outside
     ctx.fillStyle = "rgba(0,0,0,0.30)";
     ctx.fillRect(0, 0, W, y0);
     ctx.fillRect(0, y1, W, H - y1);
     ctx.fillRect(0, y0, x0, y1 - y0);
     ctx.fillRect(x1, y0, W - x1, y1 - y0);
 
-    // -------------------------------
     // Base rectangle
-    // -------------------------------
     ctx.setLineDash([]);
     ctx.strokeStyle = "black";
     ctx.lineWidth = 1.5;
     ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
 
-    // -------------------------------
-    // Hover highlight (edge / corner)
-    // -------------------------------
+    // Hover highlight
     if (box._hover) {
         ctx.strokeStyle = "rgba(63, 64, 99, 1)";
         ctx.lineWidth = 3;
 
         ctx.beginPath();
-
         switch (box._hover) {
-            case "left":
-                ctx.moveTo(x0, y0);
-                ctx.lineTo(x0, y1);
-                break;
-
-            case "right":
-                ctx.moveTo(x1, y0);
-                ctx.lineTo(x1, y1);
-                break;
-
-            case "top":
-                ctx.moveTo(x0, y0);
-                ctx.lineTo(x1, y0);
-                break;
-
-            case "bottom":
-                ctx.moveTo(x0, y1);
-                ctx.lineTo(x1, y1);
-                break;
-
+            case "left":   ctx.moveTo(x0,y0); ctx.lineTo(x0,y1); break;
+            case "right":  ctx.moveTo(x1,y0); ctx.lineTo(x1,y1); break;
+            case "top":    ctx.moveTo(x0,y0); ctx.lineTo(x1,y0); break;
+            case "bottom": ctx.moveTo(x0,y1); ctx.lineTo(x1,y1); break;
             case "nw":
-                ctx.moveTo(x0, y0);
-                ctx.lineTo(x0, y1);
-                ctx.moveTo(x0, y0);
-                ctx.lineTo(x1, y0);
+                ctx.moveTo(x0,y0); ctx.lineTo(x0,y1);
+                ctx.moveTo(x0,y0); ctx.lineTo(x1,y0);
                 break;
-
             case "ne":
-                ctx.moveTo(x1, y0);
-                ctx.lineTo(x1, y1);
-                ctx.moveTo(x0, y0);
-                ctx.lineTo(x1, y0);
+                ctx.moveTo(x1,y0); ctx.lineTo(x1,y1);
+                ctx.moveTo(x0,y0); ctx.lineTo(x1,y0);
                 break;
-
             case "sw":
-                ctx.moveTo(x0, y0);
-                ctx.lineTo(x0, y1);
-                ctx.moveTo(x0, y1);
-                ctx.lineTo(x1, y1);
+                ctx.moveTo(x0,y0); ctx.lineTo(x0,y1);
+                ctx.moveTo(x0,y1); ctx.lineTo(x1,y1);
                 break;
-
             case "se":
-                ctx.moveTo(x1, y0);
-                ctx.lineTo(x1, y1);
-                ctx.moveTo(x0, y1);
-                ctx.lineTo(x1, y1);
+                ctx.moveTo(x1,y0); ctx.lineTo(x1,y1);
+                ctx.moveTo(x0,y1); ctx.lineTo(x1,y1);
                 break;
         }
-
         ctx.stroke();
+    }
+
+    // Commit bubble
+    if (box._canCommit) {
+        const cx = x1 + 18;
+        const cy = (y0 + y1) / 2;
+        const r  = 9;
+
+        drawConfirmBubble(ctx, cx, cy, r);
+        box._commitBubble = { cx, cy, r };
+    } else {
+        box._commitBubble = null;
     }
 
     ctx.restore();

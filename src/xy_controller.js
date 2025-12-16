@@ -12,7 +12,10 @@ export function attachXYController({
     canvas,
     AppState,
     renderers,
-    computeTimeRangesFromXYBox
+    computeTimeRangesFromXYBox,
+
+    // NEW (MANDATORY): single authority for committing time selections
+    commitTimeRanges
 }) {
     let selecting = false;
     let dragMode  = null;
@@ -21,7 +24,7 @@ export function attachXYController({
     // "left" | "right" | "top" | "bottom"
     // "nw" | "ne" | "sw" | "se"
 
-    let selectBox = null;  // {x0,y0,x1,y1}
+    let selectBox = null;        // {x0,y0,x1,y1,_hover,_canCommit,_commitBubble}
     let tempTimeRanges = [];
 
     // ---------------------------------------------------------
@@ -42,6 +45,9 @@ export function attachXYController({
         b.x1 = n.x1;
         b.y0 = n.y0;
         b.y1 = n.y1;
+
+        // Selection can now be committed
+        b._canCommit = true;
     }
 
     function hitTestCorner(x, y, b) {
@@ -64,6 +70,29 @@ export function attachXYController({
         if (Math.abs(y - y1) < EDGE_TOL) return "bottom";
 
         return null;
+    }
+
+    // ---------------------------------------------------------
+    // Commit bubble hit test
+    // ---------------------------------------------------------
+    function hitTestCommitBubble(x, y, b) {
+        if (!b._commitBubble) return false;
+        const { cx, cy, r } = b._commitBubble;
+        return Math.hypot(x - cx, y - cy) <= r;
+    }
+
+    // ---------------------------------------------------------
+    // Commit logic (DELEGATED)
+    // ---------------------------------------------------------
+    function commitXYSelection() {
+        if (!tempTimeRanges || tempTimeRanges.length === 0) return;
+
+        // CRITICAL: delegate to time bar controller
+        commitTimeRanges(tempTimeRanges);
+
+        resetSelection();
+        renderers.redrawXY();
+        renderers.redrawTimeBar();
     }
 
     function cursorForMode(mode) {
@@ -120,8 +149,15 @@ export function attachXYController({
         if (!AppState.dataLoaded) return;
 
         const { x, y } = getCanvasCoords(e, canvas);
-
         hoverMode = null;
+
+        // Commit bubble click
+        if (selectBox && selectBox._canCommit) {
+            if (hitTestCommitBubble(x, y, selectBox)) {
+                commitXYSelection();
+                return;
+            }
+        }
 
         if (selectBox) {
             const corner = hitTestCorner(x, y, selectBox);
@@ -141,16 +177,12 @@ export function attachXYController({
             }
         }
 
-        // NEW SELECTION
+        // New selection
         selecting = true;
         dragMode  = "new";
         canvas.style.cursor = "crosshair";
 
-        selectBox = {
-            x0: x, y0: y,
-            x1: x, y1: y
-        };
-
+        selectBox = { x0: x, y0: y, x1: x, y1: y };
         tempTimeRanges = [];
         window.xyTempTimeRanges = tempTimeRanges;
 
@@ -163,15 +195,13 @@ export function attachXYController({
 
         const { x, y } = getCanvasCoords(e, canvas);
 
-        // -----------------------------------------------------
-        // Hover feedback (not dragging)
-        // -----------------------------------------------------
+        // Hover feedback
         if (!selecting && selectBox) {
             const corner = hitTestCorner(x, y, selectBox);
             if (corner) {
                 hoverMode = corner;
-                canvas.style.cursor = cursorForMode(corner);
                 selectBox._hover = corner;
+                canvas.style.cursor = cursorForMode(corner);
                 renderers.redrawXY();
                 return;
             }
@@ -179,8 +209,8 @@ export function attachXYController({
             const edge = hitTestEdges(x, y, selectBox);
             if (edge) {
                 hoverMode = edge;
-                canvas.style.cursor = cursorForMode(edge);
                 selectBox._hover = edge;
+                canvas.style.cursor = cursorForMode(edge);
                 renderers.redrawXY();
                 return;
             }
@@ -193,49 +223,35 @@ export function attachXYController({
 
         if (!selecting || !selectBox) return;
 
-        // -----------------------------------------------------
         // Dragging
-        // -----------------------------------------------------
         switch (dragMode) {
             case "new":
                 selectBox.x1 = x;
                 selectBox.y1 = y;
                 break;
-
             case "left":
                 selectBox.x0 = x;
                 break;
-
             case "right":
                 selectBox.x1 = x;
                 break;
-
             case "top":
                 selectBox.y0 = y;
                 break;
-
             case "bottom":
                 selectBox.y1 = y;
                 break;
-
             case "nw":
-                selectBox.x0 = x;
-                selectBox.y0 = y;
+                selectBox.x0 = x; selectBox.y0 = y;
                 break;
-
             case "ne":
-                selectBox.x1 = x;
-                selectBox.y0 = y;
+                selectBox.x1 = x; selectBox.y0 = y;
                 break;
-
             case "sw":
-                selectBox.x0 = x;
-                selectBox.y1 = y;
+                selectBox.x0 = x; selectBox.y1 = y;
                 break;
-
             case "se":
-                selectBox.x1 = x;
-                selectBox.y1 = y;
+                selectBox.x1 = x; selectBox.y1 = y;
                 break;
         }
 
