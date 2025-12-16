@@ -7,6 +7,17 @@ export function clamp(x, min, max) {
     return Math.max(min, Math.min(max, x));
 }
 
+export function getCanvasCoords(e, canvas) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width  / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top)  * scaleY
+    };
+}
+
 export function computeTimeRangesFromXYBox({
     box,
     X, Y, T,

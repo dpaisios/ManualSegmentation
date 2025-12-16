@@ -6,7 +6,9 @@
 
 import { arrayMin, arrayMax } from "./stats_utils.js";
 
+// -------------------------------------------------------------
 // Compute XY transform for scaling + centering
+// -------------------------------------------------------------
 export function computeXYTransform(X, Y, visibleIdxs, canvasWidth, canvasHeight) {
 
     if (visibleIdxs.length === 0) {
@@ -44,7 +46,9 @@ export function computeXYTransform(X, Y, visibleIdxs, canvasWidth, canvasHeight)
     return { minX, minY, offsetX, offsetY, scale };
 }
 
+// -------------------------------------------------------------
 // Convert data → canvas coordinates
+// -------------------------------------------------------------
 export function toCanvasX(x, transform) {
     return transform.offsetX + (x - transform.minX) * transform.scale;
 }
@@ -101,7 +105,6 @@ export function drawXYHighlight(
     transform, canvasWidth, canvasHeight,
     showUp
 ) {
-    // find time segment
     let start = 0;
     while (start < T.length && T[start] < t0) start++;
     let end = start;
@@ -111,7 +114,7 @@ export function drawXYHighlight(
 
     let i = start;
     while (i <= end) {
-        
+
         if (!showUp && Tip[i] === 0) {
             i++;
             continue;
@@ -163,13 +166,10 @@ export function drawXYFromSelections(
     canvasHeight,
     showUp
 ) {
-    // base
     drawXY(ctx, X, Y, Tip, TipSeg, visibleIdxs, transform, canvasWidth, canvasHeight);
 
-    // real selections
     for (let sel of selections) {
-        let alpha = 0.75;
-        if (tempSel) alpha = 0.4;
+        let alpha = tempSel ? 0.4 : 0.75;
         drawXYHighlight(
             ctx, X, Y, Tip, TipSeg,
             T, sel.t0, sel.t1, alpha,
@@ -178,7 +178,6 @@ export function drawXYFromSelections(
         );
     }
 
-    // temporary selection (if drawing)
     if (tempSel) {
         drawXYHighlight(
             ctx, X, Y, Tip, TipSeg,
@@ -190,9 +189,10 @@ export function drawXYFromSelections(
 }
 
 // -------------------------------------------------------------
-// XY selection box
+// XY selection box with hover highlighting
 // -------------------------------------------------------------
 export function drawXYSelectionBox(ctx, box, W, H) {
+    if (!box) return;
 
     const x0 = Math.min(box.x0, box.x1);
     const x1 = Math.max(box.x0, box.x1);
@@ -205,20 +205,80 @@ export function drawXYSelectionBox(ctx, box, W, H) {
     // Dim outside the rectangle
     // -------------------------------
     ctx.fillStyle = "rgba(0,0,0,0.30)";
-
-    ctx.fillRect(0, 0, W, y0);                 // top
-    ctx.fillRect(0, y1, W, H - y1);            // bottom
-    ctx.fillRect(0, y0, x0, y1 - y0);          // left
-    ctx.fillRect(x1, y0, W - x1, y1 - y0);     // right
+    ctx.fillRect(0, 0, W, y0);
+    ctx.fillRect(0, y1, W, H - y1);
+    ctx.fillRect(0, y0, x0, y1 - y0);
+    ctx.fillRect(x1, y0, W - x1, y1 - y0);
 
     // -------------------------------
-    // FORCE solid border
+    // Base rectangle
     // -------------------------------
-    ctx.setLineDash([]);       // ← CRITICAL
+    ctx.setLineDash([]);
     ctx.strokeStyle = "black";
     ctx.lineWidth = 1.5;
-
     ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+
+    // -------------------------------
+    // Hover highlight (edge / corner)
+    // -------------------------------
+    if (box._hover) {
+        ctx.strokeStyle = "rgba(63, 64, 99, 1)";
+        ctx.lineWidth = 3;
+
+        ctx.beginPath();
+
+        switch (box._hover) {
+            case "left":
+                ctx.moveTo(x0, y0);
+                ctx.lineTo(x0, y1);
+                break;
+
+            case "right":
+                ctx.moveTo(x1, y0);
+                ctx.lineTo(x1, y1);
+                break;
+
+            case "top":
+                ctx.moveTo(x0, y0);
+                ctx.lineTo(x1, y0);
+                break;
+
+            case "bottom":
+                ctx.moveTo(x0, y1);
+                ctx.lineTo(x1, y1);
+                break;
+
+            case "nw":
+                ctx.moveTo(x0, y0);
+                ctx.lineTo(x0, y1);
+                ctx.moveTo(x0, y0);
+                ctx.lineTo(x1, y0);
+                break;
+
+            case "ne":
+                ctx.moveTo(x1, y0);
+                ctx.lineTo(x1, y1);
+                ctx.moveTo(x0, y0);
+                ctx.lineTo(x1, y0);
+                break;
+
+            case "sw":
+                ctx.moveTo(x0, y0);
+                ctx.lineTo(x0, y1);
+                ctx.moveTo(x0, y1);
+                ctx.lineTo(x1, y1);
+                break;
+
+            case "se":
+                ctx.moveTo(x1, y0);
+                ctx.lineTo(x1, y1);
+                ctx.moveTo(x0, y1);
+                ctx.lineTo(x1, y1);
+                break;
+        }
+
+        ctx.stroke();
+    }
 
     ctx.restore();
 }
