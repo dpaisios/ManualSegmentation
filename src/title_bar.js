@@ -18,6 +18,24 @@ export function attachTitleBar({
     let prevBtn = null;
 
     // ---------------------------------------------------------
+    // Folder button (left of dropdown arrow)
+    // ---------------------------------------------------------
+    const folderBtn = document.createElement("button");
+    folderBtn.className = "title-folder-btn";
+    folderBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24">
+            <path d="M3 6.5h6l2 2h10v9.5a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2v-9.5a2 2 0 0 1 2-2z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linejoin="round"/>
+        </svg>
+    `;
+    folderBtn.title = "Open file / folder";
+
+    left.insertBefore(folderBtn, arrow);
+
+    // ---------------------------------------------------------
     // Dropdown hit zone (visual + logical)
     // ---------------------------------------------------------
     const hitZone = document.createElement("div");
@@ -40,7 +58,17 @@ export function attachTitleBar({
         nav.innerHTML = "";
         prevBtn = null;
 
-        if (!AppState.fileList || AppState.fileList.length === 0) return;
+        const inFolderMode =
+            Array.isArray(AppState.fileList) &&
+            AppState.fileList.length > 0;
+
+        // Arrow only visible in folder mode
+        arrow.style.display = inFolderMode ? "" : "none";
+
+        if (!inFolderMode) {
+            hitZone.classList.remove("active");
+            return;
+        }
 
         // PREV
         const prev = document.createElement("button");
@@ -79,12 +107,12 @@ export function attachTitleBar({
             return;
         }
 
-        const barRect  = titleBarEl.getBoundingClientRect();
-        const leftRect = left.getBoundingClientRect();
-        const prevRect = prevBtn.getBoundingClientRect();
+        const barRect   = titleBarEl.getBoundingClientRect();
+        const arrowRect = arrow.getBoundingClientRect();
+        const prevRect  = prevBtn.getBoundingClientRect();
 
-        const x0 = leftRect.left - barRect.left;
-        const w  = prevRect.left - leftRect.left;
+        const x0 = arrowRect.left - barRect.left;
+        const w  = prevRect.left - arrowRect.left;
 
         if (w <= 0) {
             hitZone.classList.remove("active");
@@ -96,14 +124,14 @@ export function attachTitleBar({
     }
 
     function isInDropdownZone(clientX) {
-        if (!prevBtn) return false;
+        if (!prevBtn || arrow.style.display === "none") return false;
 
-        const leftRect = left.getBoundingClientRect();
-        const prevRect = prevBtn.getBoundingClientRect();
+        const arrowRect = arrow.getBoundingClientRect();
+        const prevRect  = prevBtn.getBoundingClientRect();
 
         return (
-            clientX >= leftRect.left &&
-            clientX <= (prevRect.left)
+            clientX >= arrowRect.left &&
+            clientX <= prevRect.left
         );
     }
 
@@ -122,17 +150,17 @@ export function attachTitleBar({
 
         if (!AppState.fileList || !lifecycle) return;
 
-        const leftRect = left.getBoundingClientRect();
-        const navRect  = nav.getBoundingClientRect();
+        const labelRect = label.getBoundingClientRect();
+        const navRect   = nav.getBoundingClientRect();
 
         fileDropdown = document.createElement("div");
         fileDropdown.className = "fileDropdown";
 
-        fileDropdown.style.left = `${leftRect.left}px`;
-        fileDropdown.style.top  = `${leftRect.bottom + 4}px`;
+        fileDropdown.style.left = `${labelRect.left}px`;
+        fileDropdown.style.top  = `${labelRect.bottom + 4}px`;
 
         const maxWidth =
-            Math.max(160, navRect.left - leftRect.left);
+            Math.max(160, navRect.left - labelRect.left);
 
         fileDropdown.style.width = `${maxWidth}px`;
 
@@ -162,10 +190,7 @@ export function attachTitleBar({
         const onDocMouseDown = e => {
             if (isInDropdownZone(e.clientX)) return;
 
-            if (
-                fileDropdown &&
-                !fileDropdown.contains(e.target)
-            ) {
+            if (fileDropdown && !fileDropdown.contains(e.target)) {
                 closeDropdown();
                 document.removeEventListener("mousedown", onDocMouseDown, true);
             }
@@ -177,9 +202,37 @@ export function attachTitleBar({
     }
 
     // ---------------------------------------------------------
-    // Hover + click logic
+    // Folder button behavior
     // ---------------------------------------------------------
+    folderBtn.addEventListener("mousedown", async e => {
+        e.preventDefault();
+        e.stopPropagation();
 
+        // OPEN FILE MODE
+        if (!AppState.fileList) {
+            const res = await window.electronAPI.openFileDialog();
+            if (res.canceled) return;
+
+            window.electronAPI.emitDataFile({
+                folder: res.filePaths[0],
+                params: {}
+            });
+            return;
+        }
+
+        // OPEN FOLDER MODE
+        const res = await window.electronAPI.openFolderDialog();
+        if (res.canceled) return;
+
+        window.electronAPI.emitDataFile({
+            folder: res.filePaths[0],
+            params: { mode: "folder-session" }
+        });
+    });
+
+    // ---------------------------------------------------------
+    // Hover + click logic (arrow INCLUDED)
+    // ---------------------------------------------------------
     titleBarEl.addEventListener("mousemove", e => {
         if (isInDropdownZone(e.clientX)) {
             updateHitZone();
