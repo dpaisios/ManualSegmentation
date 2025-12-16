@@ -4,213 +4,22 @@
 // -------------------------------------------------------------
 
 import { isEditingSelection } from "./label_editor.js";
-import { quantile } from "./stats_utils.js";
-
-// -------------------------------------------------------------
-// Time tick helpers
-// -------------------------------------------------------------
-function niceStep(raw) {
-    const exp = Math.floor(Math.log10(raw));
-    const f   = raw / Math.pow(10, exp);
-
-    let nf;
-    if (f < 1.5)      nf = 1;
-    else if (f < 3)   nf = 2;
-    else if (f < 7)   nf = 5;
-    else              nf = 10;
-
-    return nf * Math.pow(10, exp);
-}
-
-function decimalsForStep(step) {
-    if (!Number.isFinite(step) || step <= 0) return 0;
-    const exp = Math.floor(Math.log10(step));
-    return exp >= 0 ? 0 : Math.min(6, -exp); // cap to avoid silly labels
-}
-
-/**
- * Adaptive ticks; labels are the raw time values (no units).
- * @returns {Array<{t:number,label:string}>}
- */
-export function computeTimeTicks(tMin, tMax, barWidthPx) {
-    const TARGET_PX_PER_TICK = 90;
-
-    const span = tMax - tMin;
-    if (span <= 0 || barWidthPx <= 0) return [];
-
-    const maxTicks = Math.max(2, Math.floor(barWidthPx / TARGET_PX_PER_TICK));
-    const rawStep  = span / maxTicks;
-    const step     = niceStep(rawStep);
-
-    const tStart = Math.ceil(tMin / step) * step;
-    const dec = decimalsForStep(step);
-
-    const ticks = [];
-    for (let t = tStart; t <= tMax + 1e-9; t += step) {
-        ticks.push({ t, label: t.toFixed(dec) });
-    }
-    return ticks;
-}
-
-// -------------------------------------------------------------
-// Geometry
-// -------------------------------------------------------------
-export function timeBarGeom(W, H) {
-    const leftPad  = W * 0.05;
-    const rightPad = W * 0.05;
-    const barWidth = W - leftPad - rightPad;
-    const barY0    = H * 0.45;
-    const barY1    = H * 4.5 / 6;
-
-    return { leftPad, rightPad, barWidth, barY0, barY1 };
-}
-
-export function pixelToTime(xPixel, leftPad, barWidth, tMin, tMax) {
-    let rel = (xPixel - leftPad) / barWidth;
-    rel = Math.max(0, Math.min(1, rel));
-    return tMin + rel * (tMax - tMin);
-}
-
-export function getIndexRange(T, t0, t1) {
-    let start = 0;
-    while (start < T.length && T[start] < t0) start++;
-    let end = start;
-    while (end < T.length && T[end] < t1) end++;
-    return [start, end];
-}
-
-// -------------------------------------------------------------
-// Responsive element sizing
-// -------------------------------------------------------------
-export function getHandleSizes(H) {
-    return {
-        side:      Math.max(10, H * 0.05),
-        margin:    Math.max(1,  H * 0.01),
-        triOffset: H * 0.06
-    };
-}
-
-export function getDeleteBubbleSize(H) {
-    return {
-        radius: Math.min(Math.max(10, H * 0.07), 15)
-    };
-}
-
-// -------------------------------------------------------------
-// Drawing helpers
-// -------------------------------------------------------------
-export function drawTriangle(ctx, x, y, side, direction, lineWidth = 2) {
-    const height = Math.sqrt(3) * side / 2;
-    const halfH  = height / 2;
-
-    ctx.beginPath();
-
-    if (direction === "left") {
-        const edgeX = x - lineWidth / 2;
-        ctx.moveTo(edgeX, y - 3 * halfH);
-        ctx.lineTo(edgeX, y);
-        ctx.lineTo(edgeX + side, y - halfH);
-    } else {
-        const edgeX = x + lineWidth / 2;
-        ctx.moveTo(edgeX, y - halfH);
-        ctx.lineTo(edgeX, y + 2 * halfH);
-        ctx.lineTo(edgeX - side, y);
-    }
-
-    ctx.closePath();
-    ctx.fill();
-}
-
-// Time bar subsegments (Tip-coloured) used inside selections
-export function drawTimeSubSegment(
-    ctx, T,
-    iStart, iEnd, tipVal,
-    leftPad, barWidth, barY0, barY1,
-    tMin, tMax
-) {
-    const t0 = T[iStart];
-    const t1 = T[iEnd];
-
-    const rel0 = (t0 - tMin) / (tMax - tMin);
-    const rel1 = (t1 - tMin) / (tMax - tMin);
-
-    const x0 = leftPad + rel0 * barWidth;
-    const x1 = leftPad + rel1 * barWidth;
-
-    ctx.fillStyle =
-        (tipVal === 1) ? "rgba(0,0,255,0.4)" : "rgba(255,50,50,0.4)";
-
-    ctx.fillRect(x0, barY0, x1 - x0, barY1 - barY0);
-}
-
-// -------------------------------------------------------------
-// Cluster layout for hover controls (delete bubble + label)
-// -------------------------------------------------------------
-const CLUSTER_GAP = 6;      // px between bubble and label
-const LABEL_FONT  = "12px sans-serif";
-
-function getLabelText(sel) {
-    if (sel.id != null && sel.id !== "") return String(sel.id);
-    return "";
-}
-
-// Computes all control positions for a given selection
-// Returns:
-// {
-//   bubble: { cx, cy, r },
-//   label:  { x, y, w, h }
-// }
-function computeClusterLayout(ctx, sel, T, W, H) {
-    const { leftPad, barWidth, barY0 } = timeBarGeom(W, H);
-    const tMin = T[0];
-    const tMax = T[T.length - 1];
-
-    const x0 = leftPad + (sel.t0 - tMin) / (tMax - tMin) * barWidth;
-    const x1 = leftPad + (sel.t1 - tMin) / (tMax - tMin) * barWidth;
-
-    const { side, triOffset } = getHandleSizes(H);
-    const triY   = barY0 - triOffset * 2;
-    const height = Math.sqrt(3) * side / 2;
-    const halfH  = height / 2;
-
-    const inwardTipY = triY - halfH;
-
-    const { radius } = getDeleteBubbleSize(H);
-
-    // Segment midpoint (in time-bar pixels)
-    const mid = (x0 + x1) / 2;
-
-    // ---------------------------------------------------------
-    // Geometry:
-    //   bubbleRight = mid - CLUSTER_GAP / 2
-    //   labelLeft   = mid + CLUSTER_GAP / 2
-    //
-    //   bubbleCx = bubbleRight - radius
-    //           = mid - (radius + CLUSTER_GAP / 2)
-    //
-    // => midpoint(bubbleRight, labelLeft) == mid
-    // ---------------------------------------------------------
-    const bubbleCx = mid - (radius + CLUSTER_GAP / 2);
-    const bubbleCy = inwardTipY - radius;
-
-    // Label sizing
-    const labelText = getLabelText(sel);
-    ctx.font = LABEL_FONT;
-
-    const textW = ctx.measureText(labelText).width;
-    const padX  = 6;
-
-    const boxW = textW + padX * 2;
-    const boxH = 2 * radius; // keep your choice: same visual height as bubble
-
-    const xLabel = mid + CLUSTER_GAP / 2;   // left edge of ID field
-    const yLabel = bubbleCy - boxH / 2;
-
-    return {
-        bubble: { cx: bubbleCx, cy: bubbleCy, r: radius },
-        label:  { x: xLabel, y: yLabel, w: boxW, h: boxH }
-    };
-}
+import {
+    timeBarGeom,
+    getIndexRange,
+    getHandleSizes,
+    getDeleteBubbleSize
+} from "./time_bar_geom.js";
+import {
+    drawTriangle,
+    drawTimeSubSegment,
+    computeClusterLayout,
+    getLabelText,
+    CLUSTER_GAP,
+    LABEL_FONT
+} from "./time_bar_primitives.js";
+import { computeTimeTicks } from "./time_scale.js";
+import { drawMissingTimeHatch } from "./visibility.js";
 
 // -------------------------------------------------------------
 // Hit testing
@@ -247,24 +56,7 @@ export function hitTestHandleRect(
         yClick >= yMin && yClick <= yMax
     );
 }
-/**
-export function hitTestSelectionHover(
-    x, y,
-    selections, T,
-    leftPad, barWidth,
-    barY0, barY1,
-    tMin, tMax
-) {
-    if (y < 1 || y > barY1) return null;
 
-    for (let sel of selections) {
-        const x0 = leftPad + (sel.t0 - tMin) / (tMax - tMin) * barWidth;
-        const x1 = leftPad + (sel.t1 - tMin) / (tMax - tMin) * barWidth;
-        if (x >= x0 && x <= x1) return sel;
-    }
-    return null;
-}
-*/
 // ID label rect (used also by app.js for DOM input)
 export function getLabelRect(ctx, sel, T, W, H) {
     const cluster = computeClusterLayout(ctx, sel, T, W, H);
@@ -301,62 +93,6 @@ export function hitTestDeleteBubble(
     const dy = yClick - bubbleCy;
 
     return dx * dx + dy * dy <= radius * radius;
-}
-
-// -------------------------------------------------------------
-// INTERNAL: diagonal hatch for missing-time intervals
-// -------------------------------------------------------------
-function drawMissingTimeHatch(ctx, T, W, H) {
-    if (T.length < 3) return;
-
-    // compute dt
-    const dt = [];
-    for (let i = 0; i < T.length - 1; i++) {
-        dt.push(T[i + 1] - T[i]);
-    }
-
-    const q3  = quantile(dt, 0.75);
-    const iqr = q3 - quantile(dt, 0.25);
-    const thr = q3 + 1.5 * iqr;
-    if (!Number.isFinite(thr)) return;
-
-    const { leftPad, barWidth, barY0, barY1 } = timeBarGeom(W, H);
-    const tMin = T[0];
-    const tMax = T[T.length - 1];
-    const h = barY1 - barY0;
-
-    ctx.save();
-    ctx.strokeStyle = "rgba(0,0,0,0.35)";
-    ctx.lineWidth = 1;
-
-    for (let i = 0; i < dt.length; i++) {
-        if (dt[i] <= thr) continue;
-
-        const x0 =
-            leftPad + (T[i]     - tMin) / (tMax - tMin) * barWidth;
-        const x1 =
-            leftPad + (T[i + 1] - tMin) / (tMax - tMin) * barWidth;
-
-        ctx.save();
-
-        // clip strictly to the missing-time interval
-        ctx.beginPath();
-        ctx.rect(x0, barY0, x1 - x0, barY1 - barY0);
-        ctx.clip();
-
-        // draw diagonal hatch inside clipped region
-        for (let x = x0 - h; x < x1; x += 6) {
-            ctx.beginPath();
-            ctx.moveTo(x, barY1);
-            ctx.lineTo(x + h, barY0);
-            ctx.stroke();
-        }
-
-        ctx.restore();
-
-    }
-
-    ctx.restore();
 }
 
 // -------------------------------------------------------------

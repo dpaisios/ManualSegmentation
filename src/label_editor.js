@@ -108,3 +108,19 @@ export function createLabelEditor({ container, onCommit, onCancel }) {
 export function isEditingSelection(sel) {
     return sel === activeSel;
 }
+
+export function anyEditingSelectionIn(selections) {
+    if (!selections || selections.length === 0) return false;
+    for (const sel of selections) {
+        if (isEditingSelection(sel)) return true;
+    }
+    return false;
+}
+
+export function getEditingSelection(selections) {
+    if (!selections || selections.length === 0) return null;
+    for (const sel of selections) {
+        if (isEditingSelection(sel)) return sel;
+    }
+    return null;
+}

@@ -4,6 +4,7 @@
 // -------------------------------------------------------------
 
 import { getCanvasCoords } from "./geometry.js";
+import * as Select from "./selection_manager.js";
 
 const EDGE_TOL   = 6;  // px hit tolerance for box edges
 const CORNER_TOL = 8;  // px hit tolerance for corners
@@ -12,10 +13,7 @@ export function attachXYController({
     canvas,
     AppState,
     renderers,
-    computeTimeRangesFromXYBox,
-
-    // NEW (MANDATORY): single authority for committing time selections
-    commitTimeRanges
+    computeTimeRangesFromXYBox
 }) {
     let selecting = false;
     let dragMode  = null;
@@ -106,8 +104,11 @@ export function attachXYController({
     function commitXYSelection() {
         if (!tempTimeRanges || tempTimeRanges.length === 0) return;
 
-        // CRITICAL: delegate to time bar controller
-        commitTimeRanges(tempTimeRanges);
+        Select.applySelectionRanges({
+            getSelections: () => AppState.selections,
+            setSelections: s => { AppState.selections = s; },
+            ranges: tempTimeRanges
+        });
 
         resetSelection();
         renderers.redrawXY();
