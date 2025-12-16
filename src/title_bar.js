@@ -17,6 +17,9 @@ export function attachTitleBar({
 
     let prevBtn = null;
 
+    // keep a stable reference so we can remove it on close
+    let onDocMouseDown = null;
+
     // ---------------------------------------------------------
     // Folder button (left of dropdown arrow)
     // ---------------------------------------------------------
@@ -67,6 +70,7 @@ export function attachTitleBar({
 
         if (!inFolderMode) {
             hitZone.classList.remove("active");
+            closeDropdown();
             return;
         }
 
@@ -137,9 +141,15 @@ export function attachTitleBar({
 
     function closeDropdown() {
         if (!fileDropdown) return;
+
         fileDropdown.remove();
         fileDropdown = null;
         arrow.classList.remove("open");
+
+        if (onDocMouseDown) {
+            document.removeEventListener("mousedown", onDocMouseDown, true);
+            onDocMouseDown = null;
+        }
     }
 
     function toggleFileDropdown() {
@@ -187,15 +197,23 @@ export function attachTitleBar({
         document.body.appendChild(fileDropdown);
         arrow.classList.add("open");
 
-        const onDocMouseDown = e => {
-            if (isInDropdownZone(e.clientX)) return;
+        // IMPORTANT: only "ignore" the dropdown zone when the click is INSIDE the title bar
+        onDocMouseDown = e => {
+            if (!fileDropdown) return;
 
-            if (fileDropdown && !fileDropdown.contains(e.target)) {
+            const clickInTitleBar = titleBarEl.contains(e.target);
+
+            if (clickInTitleBar && isInDropdownZone(e.clientX)) {
+                // let the title bar handler toggle; do not auto-close here
+                return;
+            }
+
+            if (!fileDropdown.contains(e.target)) {
                 closeDropdown();
-                document.removeEventListener("mousedown", onDocMouseDown, true);
             }
         };
 
+        // attach in capture so we win over other handlers
         setTimeout(() => {
             document.addEventListener("mousedown", onDocMouseDown, true);
         }, 0);
@@ -248,6 +266,12 @@ export function attachTitleBar({
 
     titleBarEl.addEventListener("mousedown", e => {
         if (!AppState.fileList) return;
+
+        // Clicking anywhere else on the title bar closes the dropdown
+        if (fileDropdown && !isInDropdownZone(e.clientX)) {
+            closeDropdown();
+            return;
+        }
 
         if (isInDropdownZone(e.clientX)) {
             e.preventDefault();

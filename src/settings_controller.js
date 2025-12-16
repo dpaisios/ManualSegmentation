@@ -63,7 +63,9 @@ export function attachSettingsController({
             }
 
             if (opt.label === "Show lifts") {
+                resetXYSelection();   // ← REQUIRED
                 renderers.redrawXY();
+                renderers.redrawTimeBar();
             }
             return;
         }
