@@ -194,19 +194,29 @@ export function drawXYFromSelections(
 function drawConfirmBubble(ctx, cx, cy, r) {
     ctx.save();
 
-    ctx.shadowColor = "rgba(0,0,0,0.25)";
-    ctx.shadowBlur = 6;
-    ctx.shadowOffsetY = 2;
+    // Stronger, cleaner elevation
+    ctx.shadowColor = "rgba(0,0,0,0.35)";
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 3;
 
-    ctx.fillStyle = "rgb(46, 204, 113)";
+    // High-contrast fill (works on light & dark backgrounds)
+    ctx.fillStyle = "#2ecc71"; // keep green, but solid
+
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
 
+    // White outline for separation from dimmed background
     ctx.shadowColor = "transparent";
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 1.25;
+    ctx.stroke();
+
+    // Checkmark
     ctx.strokeStyle = "white";
     ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
+    ctx.lineJoin = "round";
 
     ctx.beginPath();
     ctx.moveTo(cx - r * 0.45, cy);
@@ -278,7 +288,7 @@ export function drawXYSelectionBox(ctx, box, W, H) {
     if (box._canCommit) {
         const cx = x1 + 18;
         const cy = (y0 + y1) / 2;
-        const r  = 9;
+        const r  = 12;
 
         drawConfirmBubble(ctx, cx, cy, r);
         box._commitBubble = { cx, cy, r };

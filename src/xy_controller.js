@@ -64,10 +64,29 @@ export function attachXYController({
     function hitTestEdges(x, y, b) {
         const { x0, x1, y0, y1 } = normBox(b);
 
-        if (Math.abs(x - x0) < EDGE_TOL) return "left";
-        if (Math.abs(x - x1) < EDGE_TOL) return "right";
-        if (Math.abs(y - y0) < EDGE_TOL) return "top";
-        if (Math.abs(y - y1) < EDGE_TOL) return "bottom";
+        // LEFT edge
+        if (
+            Math.abs(x - x0) < EDGE_TOL &&
+            y >= y0 && y <= y1
+        ) return "left";
+
+        // RIGHT edge
+        if (
+            Math.abs(x - x1) < EDGE_TOL &&
+            y >= y0 && y <= y1
+        ) return "right";
+
+        // TOP edge
+        if (
+            Math.abs(y - y0) < EDGE_TOL &&
+            x >= x0 && x <= x1
+        ) return "top";
+
+        // BOTTOM edge
+        if (
+            Math.abs(y - y1) < EDGE_TOL &&
+            x >= x0 && x <= x1
+        ) return "bottom";
 
         return null;
     }
