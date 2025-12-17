@@ -2,6 +2,23 @@
 // settings_ui.js — EXACT visual match to original app.js
 // -------------------------------------------------------------
 
+function lerp(a, b, t) {
+    return a + (b - a) * t;
+}
+
+function lerpColor(c0, c1, t) {
+    return {
+        r: Math.round(lerp(c0.r, c1.r, t)),
+        g: Math.round(lerp(c0.g, c1.g, t)),
+        b: Math.round(lerp(c0.b, c1.b, t))
+    };
+}
+
+// Smoothstep easing (better UI feel than linear)
+function smoothstep(t) {
+    return t * t * (3 - 2 * t);
+}
+
 export function computeSettingsLayout(W, H, options) {
 
     const boxSize  = Math.min(Math.max(12, H * 0.35), 20);
@@ -25,7 +42,7 @@ export function computeSettingsLayout(W, H, options) {
             boxSize +
             fontSize * 0.6 +
             textWidth +
-            boxSize * 1.2;  // original spacing buffer
+            boxSize * 1.2;
 
         items.push({
             label: opt.label,
@@ -40,8 +57,8 @@ export function computeSettingsLayout(W, H, options) {
         x += fullW;
     }
 
-    // Export button (match original dimensions)
-    const btnW = W * 0.12;
+    // Export button
+    const btnW = W * 0.10;
     const btnH = H * 0.55;
     const btnX = W - btnW - padding;
     const btnY = midY - btnH / 2;
@@ -56,7 +73,7 @@ export function computeSettingsLayout(W, H, options) {
 
 
 // -------------------------------------------------------------
-// Draw settings exactly like original app.js
+// Draw settings
 // -------------------------------------------------------------
 export function drawSettings(ctx, W, H, options) {
 
@@ -72,23 +89,20 @@ export function drawSettings(ctx, W, H, options) {
     const midY = H / 2;
 
     // -------------------------------------------------
-    // Draw checkboxes exactly like original
+    // Checkboxes (unchanged)
     // -------------------------------------------------
     for (let i = 0; i < items.length; i++) {
 
         const it = items[i];
         const opt = options[i];
 
-        // Box border (same stroke as old app.js)
         ctx.lineWidth = Math.max(2, boxSize * 0.12);
         ctx.strokeStyle = "#222";
         ctx.strokeRect(it.x, it.y, boxSize, boxSize);
 
-        // Background
         ctx.fillStyle = "rgba(0,0,0,0.04)";
         ctx.fillRect(it.x, it.y, boxSize, boxSize);
 
-        // Checkmark
         if (opt.checked) {
             ctx.strokeStyle = "#111";
             ctx.lineWidth = Math.max(2, boxSize * 0.15);
@@ -108,7 +122,6 @@ export function drawSettings(ctx, W, H, options) {
             ctx.stroke();
         }
 
-        // Label text (match original)
         ctx.fillStyle = "black";
         ctx.fillText(
             opt.label,
@@ -116,7 +129,6 @@ export function drawSettings(ctx, W, H, options) {
             midY
         );
 
-        // Save full clickable region (original behavior)
         opt.fullX = it.x;
         opt.fullY = it.y;
         opt.fullW = it.width;
@@ -124,30 +136,57 @@ export function drawSettings(ctx, W, H, options) {
     }
 
     // -------------------------------------------------
-    // Draw Export button (exact original style)
+    // Export button (smooth animated feedback)
     // -------------------------------------------------
-    ctx.fillStyle = "#2b6cb0";
-    ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
+    const r = Math.min(6, btn.h / 2);
 
-    ctx.strokeStyle = "black";
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
+    const pRaw = ctx._exportAnimP ?? 0;
+    const p = smoothstep(Math.max(0, Math.min(1, pRaw)));
 
+    const baseBlue   = { r: 59,  g: 130, b: 246 }; // #3b82f6
+    const successGreen = { r: 34, g: 197, b: 94 }; // #22c55e
+
+    const color =
+        p > 0
+            ? lerpColor(baseBlue, successGreen, p)
+            : baseBlue;
+
+    ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
+
+    ctx.beginPath();
+    ctx.moveTo(btn.x + r, btn.y);
+    ctx.lineTo(btn.x + btn.w - r, btn.y);
+    ctx.quadraticCurveTo(btn.x + btn.w, btn.y, btn.x + btn.w, btn.y + r);
+    ctx.lineTo(btn.x + btn.w, btn.y + btn.h - r);
+    ctx.quadraticCurveTo(btn.x + btn.w, btn.y + btn.h, btn.x + btn.w - r, btn.y + btn.h);
+    ctx.lineTo(btn.x + r, btn.y + btn.h);
+    ctx.quadraticCurveTo(btn.x, btn.y + btn.h, btn.x, btn.y + btn.h - r);
+    ctx.lineTo(btn.x, btn.y + r);
+    ctx.quadraticCurveTo(btn.x, btn.y, btn.x + r, btn.y);
+    ctx.fill();
+
+    // Text: switch only once clearly green
     ctx.fillStyle = "white";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("Export", btn.x + btn.w / 2, H / 2);
+
+    const label = (p > 0.35) ? "Exported" : "Export";
+
+    ctx.fillText(
+        label,
+        btn.x + btn.w / 2,
+        btn.y + btn.h / 2
+    );
 
     return layout;
 }
 
 
 // -------------------------------------------------------------
-// Hit testing (same logic as original)
+// Hit testing (unchanged)
 // -------------------------------------------------------------
 export function hitTestSettings(x, y, layout, options) {
 
-    // Check options
     for (let i = 0; i < options.length; i++) {
         const opt = options[i];
         if (
@@ -160,7 +199,6 @@ export function hitTestSettings(x, y, layout, options) {
         }
     }
 
-    // Check export button
     const b = layout.btn;
     if (
         x >= b.x && x <= b.x + b.w &&

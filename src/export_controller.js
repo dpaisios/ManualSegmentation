@@ -14,22 +14,22 @@ export function createExportController({
         // -----------------------------------------------------
         if (!AppState.detectedCols) {
             alert("No detected column mapping.");
-            return;
+            return false;
         }
 
         if (!AppState.originalRaw || !AppState.originalRaw.length) {
             alert("No raw data loaded.");
-            return;
+            return false;
         }
 
         if (!AppState.T || !AppState.T.length) {
             alert("No time vector loaded.");
-            return;
+            return false;
         }
 
         if (!AppState.selections || AppState.selections.length === 0) {
             alert("No segments selected.");
-            return;
+            return false;
         }
 
         // -----------------------------------------------------
@@ -43,7 +43,7 @@ export function createExportController({
 
         if (!rows.length) {
             alert("Export produced no rows (selection/data mismatch).");
-            return;
+            return false;
         }
 
         const txt = buildExportJSON(rows);
@@ -61,10 +61,9 @@ export function createExportController({
         const outName = `${base}_segmented.json`;
 
         // -----------------------------------------------------
-        // MANUAL MODE (existing behavior)
+        // MANUAL MODE
         // -----------------------------------------------------
         if (cfg.mode === "manual") {
-
             const blob = new Blob([txt], { type: "application/json" });
             const url  = URL.createObjectURL(blob);
 
@@ -74,7 +73,7 @@ export function createExportController({
             a.click();
 
             URL.revokeObjectURL(url);
-            return;
+            return true;
         }
 
         // -----------------------------------------------------
@@ -87,19 +86,17 @@ export function createExportController({
             exportDir = cfg.fixedPath;
             if (!exportDir) {
                 alert("No fixed export folder selected.");
-                return;
+                return false;
             }
         }
 
         // RELATIVE: <load-location>/Segmented
         if (cfg.mode === "relative") {
-
             if (!AppState.originalFilePath) {
                 alert("Missing source file path for export.");
-                return;
+                return false;
             }
 
-            // Folder containing the currently loaded file
             const loadDir =
                 window.electronAPI.dirname(AppState.originalFilePath);
 
@@ -114,10 +111,11 @@ export function createExportController({
             window.electronAPI.mkdir(exportDir, { recursive: true });
             const outPath = window.electronAPI.join(exportDir, outName);
             window.electronAPI.writeFile(outPath, txt);
+            return true;
         } catch (err) {
             console.error(err);
             alert("Failed to write export file.");
-            return;
+            return false;
         }
     }
 

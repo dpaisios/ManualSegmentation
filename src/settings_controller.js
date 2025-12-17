@@ -31,6 +31,40 @@ export function attachSettingsController({
         settingsLayout = layout;
     }
 
+    function animateExportSuccess() {
+        const ctx = canvas.getContext("2d");
+
+        const FADE_IN  = 150;
+        const HOLD     = 900;
+        const FADE_OUT = 500;
+
+        const t0 = performance.now();
+
+        function frame(now) {
+            const dt = now - t0;
+
+            let p;
+
+            if (dt < FADE_IN) {
+                p = dt / FADE_IN;
+            } else if (dt < FADE_IN + HOLD) {
+                p = 1;
+            } else if (dt < FADE_IN + HOLD + FADE_OUT) {
+                p = 1 - (dt - FADE_IN - HOLD) / FADE_OUT;
+            } else {
+                ctx._exportAnimP = 0;
+                renderers.redrawSettings();
+                return;
+            }
+
+            ctx._exportAnimP = Math.max(0, Math.min(1, p));
+            renderers.redrawSettings();
+            requestAnimationFrame(frame);
+        }
+
+        requestAnimationFrame(frame);
+    }
+
     canvas.addEventListener("mousedown", e => {
         const r = canvas.getBoundingClientRect();
         const x = e.clientX - r.left;
@@ -71,7 +105,10 @@ export function attachSettingsController({
         }
 
         if (hit.type === "export") {
-            exportData();
+            (async () => {
+                const ok = await exportData();
+                if (ok) animateExportSuccess();
+            })();
         }
     });
 
