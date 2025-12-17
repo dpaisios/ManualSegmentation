@@ -39,4 +39,8 @@ export const AppState = {
 
     // absoluteFilePath -> selectionsVersion at last export
     lastExportedVersionByFile: {},
+    
+    // time metadata (for segmented import)
+    timeColIndex: null,
+    timeColName: null,
 };

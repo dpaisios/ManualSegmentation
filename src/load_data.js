@@ -23,7 +23,6 @@ import { AppState } from "./app_state.js";
 export let detectedCols = null;
 export let originalRaw = null;          // TRUE original, immutable
 export let X = [], Y = [], T = [], Tip = [], TipSeg = [];
-//export let exportDataBuffer = [];
 export let exportPathOverrideGlobal = null;
 
 // -------------------------------------------------------------
@@ -35,9 +34,6 @@ export function loadData(
     exportPathOverride = null,
     settingsOptions = null
 ) {
-    // ---------------------------------------------------------
-    // Validate ONLY on first load (file parsing stage)
-    // ---------------------------------------------------------
     if (!AppState.dataLoaded) {
         if (!raw || !raw.length || typeof raw[0] !== "object") {
             alert("Invalid or unsupported data format.");
@@ -49,9 +45,6 @@ export function loadData(
         exportPathOverrideGlobal = exportPathOverride;
     }
 
-    // ---------------------------------------------------------
-    // Preserve TRUE original raw data (deep copy, ONCE)
-    // ---------------------------------------------------------
     if (!originalRaw && raw && raw.length) {
         originalRaw = raw.map(r => ({ ...r }));
     }
@@ -61,15 +54,9 @@ export function loadData(
         return;
     }
 
-    // ---------------------------------------------------------
-    // Working copy for processing
-    // ---------------------------------------------------------
     let data = originalRaw.map(r => ({ ...r }));
     let colNames = Object.keys(data[0]);
 
-    // ---------------------------------------------------------
-    // Column override (WORKING COPY ONLY)
-    // ---------------------------------------------------------
     if (
         colNamesOverride &&
         Array.isArray(colNamesOverride) &&
@@ -86,9 +73,6 @@ export function loadData(
         colNames = [...colNamesOverride];
     }
 
-    // ---------------------------------------------------------
-    // Convert all fields to numeric (NaN allowed)
-    // ---------------------------------------------------------
     data = data.map(r => {
         const o = {};
         for (const k of colNames) {
@@ -104,15 +88,31 @@ export function loadData(
         detectColumns(data, colNames);
 
     detectedCols = cols;
+
+    // Persist time column metadata for segmented import
+    AppState.timeColIndex =
+        (typeof cols.t === "number") ? cols.t : null;
+
+    AppState.timeColName =
+        (typeof cols.t === "number") ? Object.keys(originalRaw[0])[cols.t] : null;
+
+    // Persist raw time origin (for segmented import re-alignment)
+    if (
+        AppState.timeColName &&
+        originalRaw.length > 0 &&
+        Number.isFinite(Number(originalRaw[0][AppState.timeColName]))
+    ) {
+        AppState.rawTime0 = Number(originalRaw[0][AppState.timeColName]);
+    } else {
+        AppState.rawTime0 = null;
+    }
+
     data = processedData;
 
     buildCanonicalFields(data, detectedCols, colNames);
     computeTipSeg(data);
     timeNormalization(data);
 
-    // ---------------------------------------------------------
-    // Filters (re-applied from TRUE original each time)
-    // ---------------------------------------------------------
     if (settingsOptions?.find(o => o.label === "Remove last stroke")?.checked) {
         data = removeLastJS(data, detectedCols);
     }
@@ -121,9 +121,6 @@ export function loadData(
         data = removeEdgeLifts(data);
     }
 
-    // ---------------------------------------------------------
-    // Fill processed-domain vectors
-    // ---------------------------------------------------------
     X.length = 0;
     Y.length = 0;
     T.length = 0;
@@ -138,34 +135,26 @@ export function loadData(
         TipSeg.push(r.Tip_seg);
     }
 
-    // ---------------------------------------------------------
-    // Processed data buffer (used for export)
-    // ---------------------------------------------------------
-//    exportDataBuffer = data;
-
-    // ---------------------------------------------------------
-    // Sync AppState (single source of truth)
-    // ---------------------------------------------------------
     AppState.X = X;
     AppState.Y = Y;
     AppState.T = T;
     AppState.Tip = Tip;
     AppState.TipSeg = TipSeg;
     AppState.detectedCols = detectedCols;
-    AppState.originalRaw = originalRaw;   // TRUE original
-//    AppState.exportDataBuffer = exportDataBuffer;
+    AppState.originalRaw = originalRaw;
 }
 
 // -------------------------------------------------------------
-// HARD RESET (used when switching files)
+// HARD RESET
 // -------------------------------------------------------------
 export function resetLoaderState() {
     detectedCols = null;
     originalRaw = null;
-//    exportDataBuffer = [];
     X.length = 0;
     Y.length = 0;
     T.length = 0;
     Tip.length = 0;
     TipSeg.length = 0;
+
+    // IMPORTANT: timeColIndex MUST persist
 }

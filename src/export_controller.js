@@ -66,7 +66,8 @@ export function createExportController({
 
             URL.revokeObjectURL(url);
 
-            recordSuccessfulExport();
+            // Manual mode has no stable path → do not set exportPath
+            recordSuccessfulExport(null);
             return true;
         }
 
@@ -98,10 +99,13 @@ export function createExportController({
 
         try {
             window.electronAPI.mkdir(exportDir, { recursive: true });
-            const outPath = window.electronAPI.join(exportDir, outName);
+
+            const outPath =
+                window.electronAPI.join(exportDir, outName);
+
             window.electronAPI.writeFile(outPath, txt);
 
-            recordSuccessfulExport();
+            recordSuccessfulExport(outPath);
             return true;
         } catch (err) {
             console.error(err);
@@ -113,13 +117,14 @@ export function createExportController({
     // -------------------------------------------------
     // INTERNAL helper
     // -------------------------------------------------
-    function recordSuccessfulExport() {
+    function recordSuccessfulExport(exportPath) {
         const path = AppState.originalFilePath;
         if (!path) return;
 
         AppState.exportTracker[path] = {
             exportCount: AppState.selections.length,
-            exportedAt: Date.now()
+            exportedAt: Date.now(),
+            exportPath // <-- CRITICAL for in-session import
         };
 
         AppState.lastExportedVersionByFile[path] =

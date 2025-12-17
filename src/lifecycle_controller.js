@@ -6,6 +6,8 @@
 import { parseData } from "./parse_data.js";
 import { showFormatSelectionModal } from "./ui_format_modal.js";
 import { resetLoaderState } from "./load_data.js";
+import { scanExportsForFolderSession } from "./export_scan.js";
+import { importSelectionsFromSegmentedExport } from "./import_segmented.js";
 
 export function attachLifecycleController({
     AppState,
@@ -24,14 +26,9 @@ export function attachLifecycleController({
     // HARD RESET BETWEEN FILES (CRITICAL)
     // ---------------------------------------------------------
     function resetForNewFile() {
-        // App state
         AppState.selections = [];
         AppState.dataLoaded = false;
-
-        // reset "dirty" tracker for the newly loaded file
         AppState.selectionsVersion = 0;
-
-        // Loader module state (CRITICAL)
         resetLoaderState();
     }
 
@@ -43,8 +40,7 @@ export function attachLifecycleController({
     function countFormats(entries) {
         const counts = {};
         for (const e of entries) {
-            if (!counts[e.ext]) counts[e.ext] = 0;
-            counts[e.ext]++;
+            counts[e.ext] = (counts[e.ext] ?? 0) + 1;
         }
         return counts;
     }
@@ -83,9 +79,7 @@ export function attachLifecycleController({
     function detectAcceptedFormats(entries) {
         const set = new Set();
         for (const e of entries) {
-            if (ACCEPTED_EXTS.includes(e.ext)) {
-                set.add(e.ext);
-            }
+            if (ACCEPTED_EXTS.includes(e.ext)) set.add(e.ext);
         }
         return [...set].sort();
     }
@@ -93,8 +87,18 @@ export function attachLifecycleController({
     // ---------------------------------------------------------
     // LOAD FILE BY INDEX (FOLDER SESSION MODE)
     // ---------------------------------------------------------
-    async function loadFileAtIndex(idx) {
+    async function loadFileAtIndex(idx, opts = {}) {
         if (!AppState.fileList) return;
+
+        // Ignore reload of current file unless import is explicitly requested
+        if (
+            AppState.dataLoaded &&
+            idx === AppState.fileIndex &&
+            !opts?.hasSegmentedExport
+        ) {
+            return;
+        }
+
         if (idx < 0 || idx >= AppState.fileList.length) return;
 
         // --- UNSAVED SELECTION GUARD (EXPORT-AWARE) ---
@@ -128,14 +132,56 @@ export function attachLifecycleController({
             if (!ok) return;
         }
 
+        // -------------------------------------------------
+        // HARD RESET
+        // -------------------------------------------------
         resetForNewFile();
 
         const filePath = AppState.fileList[idx];
         const txt  = await window.electronAPI.readFile(filePath);
         const rows = parseData(txt, filePath);
 
+        // Canonical raw load (this defines AppState.T, X, Y, etc.)
         loadData(rows, null, null, settingsOptions);
 
+        // -------------------------------------------------
+        // AUTO-IMPORT FROM SEGMENTED EXPORT (TIME-BASED)
+        // -------------------------------------------------
+        const tracked = AppState.exportTracker?.[filePath] ?? null;
+
+        const shouldImport =
+            opts.hasSegmentedExport ||
+            (
+                tracked?.exportPath &&
+                (!AppState.selections || AppState.selections.length === 0)
+            );
+
+        if (shouldImport && tracked?.exportPath) {
+            try {
+                
+                console.log(
+                    "IMPORT CHECK",
+                    "timeColIndex =", AppState.timeColIndex,
+                    "timeColName =", AppState.timeColName,
+                    "file =", filePath
+                );
+
+                const imported = await importSelectionsFromSegmentedExport({
+                    exportPath: tracked.exportPath,
+                    baseT: AppState.T
+                });
+
+                AppState.selections = imported;
+                AppState.selectionsVersion = 0;
+                AppState.lastExportedVersionByFile[filePath] = 0;
+            } catch (err) {
+                console.error("Failed to import segmented export:", err);
+            }
+        }
+
+        // -------------------------------------------------
+        // FINALIZE STATE
+        // -------------------------------------------------
         AppState.fileIndex = idx;
         AppState.originalFileName = filePath.split(/[/\\]/).pop();
         AppState.originalFilePath = filePath;
@@ -205,16 +251,13 @@ export function attachLifecycleController({
             return;
         }
 
-        // DIRECTORY MODE
         if (window.electronAPI.isDirectory(folder)) {
 
-            // TEMPDATA MODE
             if (params.mode === "tempdata") {
                 await loadNewestFileInFolder(folder, params);
                 return;
             }
 
-            // USER FOLDER SESSION
             const entries = await listFlatFiles(folder);
             const formats = detectAcceptedFormats(entries);
 
@@ -251,8 +294,16 @@ export function attachLifecycleController({
                 return;
             }
 
+            AppState.exportTracker = {};
+            AppState.lastExportedVersionByFile = {};
             AppState.fileList = files;
             AppState.fileIndex = 0;
+
+            await scanExportsForFolderSession({
+                AppState,
+                dataFilesAbs: AppState.fileList,
+                dataFolderAbs: folder
+            });
 
             await loadFileAtIndex(0);
             return;
@@ -313,7 +364,7 @@ export function attachLifecycleController({
             const fileName = filePath.split(/[/\\]/).pop();
 
             AppState.originalFileName = fileName;
-            AppState.originalFilePath = filePath; 
+            AppState.originalFilePath = filePath;
             AppState.fileList = null;
             AppState.fileIndex = -1;
             AppState.dataLoaded = true;

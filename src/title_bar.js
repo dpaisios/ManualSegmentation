@@ -208,6 +208,16 @@ export function attachTitleBar({
             item.onclick = e => {
                 e.stopPropagation();
                 closeDropdown();
+
+                const tracked = AppState.exportTracker?.[fullPath] ?? null;
+
+                if (tracked && tracked.exportPath) {
+                    lifecycle.loadFileAtIndex(idx, {
+                        hasSegmentedExport: true
+                    });
+                    return;
+                }
+
                 if (idx !== AppState.fileIndex) {
                     lifecycle.loadFileAtIndex(idx);
                 }
