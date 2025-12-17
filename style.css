@@ -305,3 +305,54 @@ canvas {
     background: rgba(0,0,0,0.12);
     font-weight: 500;
 }
+
+#exportOptions {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(0,0,0,0.15);
+    width: 520px;
+    max-width: 92vw;
+}
+
+.exportTitle {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #222;
+}
+
+.exportRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 0;
+    font-size: 14px;
+    color: #222;
+    user-select: none;
+}
+
+/* EXPORT PATH SELECTION ---------------------------------------- */
+
+#chooseExportFolderBtn {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #555;
+    background: white;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+#chooseExportFolderBtn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.exportPath {
+    font-size: 12px;
+    color: #444;
+    opacity: 0.9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 260px;
+}

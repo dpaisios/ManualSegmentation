@@ -24,5 +24,12 @@ export const AppState = {
     originalFileName: null,
 
     // selections
-    selections: []
+    selections: [],
+
+    // export destination policy
+    exportConfig: {
+        mode: "relative",
+        fixedPath: null
+    },
+    originalFilePath: null,
 };

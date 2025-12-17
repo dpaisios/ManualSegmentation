@@ -114,6 +114,7 @@ export function attachLifecycleController({
 
         AppState.fileIndex = idx;
         AppState.originalFileName = filePath.split(/[/\\]/).pop();
+        AppState.originalFilePath = filePath;
         AppState.dataLoaded = true;
 
         setTitle(AppState.originalFileName);
@@ -161,6 +162,7 @@ export function attachLifecycleController({
         );
 
         AppState.originalFileName = newestPath.split(/[/\\]/).pop();
+        AppState.originalFilePath = newestPath;
         AppState.fileList = null;
         AppState.fileIndex = -1;
         AppState.dataLoaded = true;
@@ -248,6 +250,7 @@ export function attachLifecycleController({
         const fileName = folder.split(/[/\\]/).pop();
 
         AppState.originalFileName = fileName;
+        AppState.originalFilePath = folder;
         AppState.fileList = null;
         AppState.fileIndex = -1;
         AppState.dataLoaded = true;
@@ -286,6 +289,7 @@ export function attachLifecycleController({
             const fileName = filePath.split(/[/\\]/).pop();
 
             AppState.originalFileName = fileName;
+            AppState.originalFilePath = filePath; 
             AppState.fileList = null;
             AppState.fileIndex = -1;
             AppState.dataLoaded = true;

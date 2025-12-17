@@ -41,6 +41,68 @@ import {
 } from "./src/time_bar_primitives.js";
 
 // -------------------------------------------------------------
+// Export options
+// -------------------------------------------------------------
+function attachExportOptionsUI() {
+    const rRelative = document.getElementById("exportModeRelative");
+    const rFixed    = document.getElementById("exportModeFixed");
+    const rManual   = document.getElementById("exportModeManual");
+
+    const chooseBtn = document.getElementById("chooseExportFolderBtn");
+    const pathEl    = document.getElementById("exportFolderPath");
+
+    if (!rRelative || !rFixed || !rManual || !chooseBtn || !pathEl) return;
+
+    function syncUIFromState() {
+        const cfg = AppState.exportConfig;
+
+        rRelative.checked = cfg.mode === "relative";
+        rFixed.checked    = cfg.mode === "fixed";
+        rManual.checked   = cfg.mode === "manual";
+
+        chooseBtn.disabled = cfg.mode !== "fixed";
+        pathEl.textContent = cfg.fixedPath ? cfg.fixedPath : "(none)";
+        pathEl.title = cfg.fixedPath ? cfg.fixedPath : "";
+    }
+
+    rRelative.addEventListener("change", () => {
+        if (!rRelative.checked) return;
+        AppState.exportConfig.mode = "relative";
+        syncUIFromState();
+    });
+
+    rManual.addEventListener("change", () => {
+        if (!rManual.checked) return;
+        AppState.exportConfig.mode = "manual";
+        syncUIFromState();
+    });
+
+    rFixed.addEventListener("change", () => {
+        if (!rFixed.checked) return;
+        AppState.exportConfig.mode = "fixed";
+        // do not force user to pick immediately
+        syncUIFromState();
+    });
+
+    chooseBtn.addEventListener("click", async () => {
+        const res = await window.electronAPI.openFolderDialog();
+        if (res.canceled) return;
+
+        const folder = res.filePaths?.[0];
+        if (!folder) return;
+
+        AppState.exportConfig.fixedPath = folder;
+        AppState.exportConfig.mode = "fixed";
+        syncUIFromState();
+    });
+
+    syncUIFromState();
+}
+
+// call once during init (near the bottom before showing overlay is fine)
+attachExportOptionsUI();
+
+// -------------------------------------------------------------
 // Canvases
 // -------------------------------------------------------------
 const xyCanvas       = document.getElementById("xyCanvas");

@@ -8,10 +8,9 @@ export function createExportController({
     extractRowsForExport,
     buildExportJSON
 }) {
-    function exportData() {
-
+    async function exportData() {
         // -----------------------------------------------------
-        // Validation
+        // Validation (unchanged)
         // -----------------------------------------------------
         if (!AppState.detectedCols) {
             alert("No detected column mapping.");
@@ -34,10 +33,9 @@ export function createExportController({
         }
 
         // -----------------------------------------------------
-        // Export (CORRECT, SINGLE-PASS LOGIC)
+        // Build export payload (unchanged)
         // -----------------------------------------------------
-        // IDs are assigned INSIDE extractRowsForExport
-        let rows = extractRowsForExport(
+        const rows = extractRowsForExport(
             AppState.originalRaw,
             AppState.selections,
             AppState.T
@@ -50,20 +48,77 @@ export function createExportController({
 
         const txt = buildExportJSON(rows);
 
-        const blob = new Blob([txt], { type: "application/json" });
-        const url  = URL.createObjectURL(blob);
+        // -----------------------------------------------------
+        // Resolve export policy
+        // -----------------------------------------------------
+        const cfg = AppState.exportConfig ?? { mode: "manual" };
 
-        const a = document.createElement("a");
-        a.href = url;
         const base =
             AppState.originalFileName
-                ? AppState.originalFileName.replace(/\.json$/i, "")
+                ? AppState.originalFileName.replace(/\.[^.]+$/, "")
                 : "export";
 
-        a.download = `${base}_segmented.json`;
-        a.click();
+        const outName = `${base}_segmented.json`;
 
-        URL.revokeObjectURL(url);
+        // -----------------------------------------------------
+        // MANUAL MODE (existing behavior)
+        // -----------------------------------------------------
+        if (cfg.mode === "manual") {
+
+            const blob = new Blob([txt], { type: "application/json" });
+            const url  = URL.createObjectURL(blob);
+
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = outName;
+            a.click();
+
+            URL.revokeObjectURL(url);
+            return;
+        }
+
+        // -----------------------------------------------------
+        // AUTOMATIC MODES (relative / fixed)
+        // -----------------------------------------------------
+        let exportDir = null;
+
+        // FIXED: exactly what the user chose
+        if (cfg.mode === "fixed") {
+            exportDir = cfg.fixedPath;
+            if (!exportDir) {
+                alert("No fixed export folder selected.");
+                return;
+            }
+        }
+
+        // RELATIVE: <load-location>/Segmented
+        if (cfg.mode === "relative") {
+
+            if (!AppState.originalFilePath) {
+                alert("Missing source file path for export.");
+                return;
+            }
+
+            // Folder containing the currently loaded file
+            const loadDir =
+                window.electronAPI.dirname(AppState.originalFilePath);
+
+            exportDir =
+                window.electronAPI.join(loadDir, "Segmented");
+        }
+
+        // -----------------------------------------------------
+        // Write file (NO prompt)
+        // -----------------------------------------------------
+        try {
+            window.electronAPI.mkdir(exportDir, { recursive: true });
+            const outPath = window.electronAPI.join(exportDir, outName);
+            window.electronAPI.writeFile(outPath, txt);
+        } catch (err) {
+            console.error(err);
+            alert("Failed to write export file.");
+            return;
+        }
     }
 
     return { exportData };

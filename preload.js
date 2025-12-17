@@ -26,6 +26,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
     join: (...parts) => path.join(...parts),
 
+    dirname: (p) => path.dirname(p),
+
+    mkdir: (dirPath, opts = { recursive: true }) => fs.mkdirSync(dirPath, opts),
+
     writeFile: (filePath, data) => fs.writeFileSync(filePath, data),
 
     // ---------------------------------------------------------

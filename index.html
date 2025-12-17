@@ -29,6 +29,27 @@
                 <button id="openFileBtn">Open File</button>
                 <button id="openFolderBtn">Open Folder</button>
             </div>
+
+            <div id="exportOptions">
+            <div class="exportTitle">Export destination</div>
+
+            <label class="exportRow">
+                <input type="radio" name="exportMode" id="exportModeRelative" value="relative" checked>
+                <span>[Segmented] folder at file/folder path</span>
+            </label>
+
+            <label class="exportRow">
+                <input type="radio" name="exportMode" id="exportModeFixed" value="fixed">
+                <span>Fixed folder:</span>
+                <button id="chooseExportFolderBtn" type="button">Choose…</button>
+                <span id="exportFolderPath" class="exportPath">(none)</span>
+            </label>
+
+            <label class="exportRow">
+                <input type="radio" name="exportMode" id="exportModeManual" value="manual">
+                <span>Manual on export</span>
+            </label>
+            </div>
         </div>
     </div>
 
