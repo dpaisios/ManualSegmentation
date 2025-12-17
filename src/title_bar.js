@@ -177,7 +177,29 @@ export function attachTitleBar({
         AppState.fileList.forEach((fullPath, idx) => {
             const item = document.createElement("div");
             item.className = "fileDropdownItem";
-            item.textContent = fullPath.split(/[/\\]/).pop();
+
+            const fileName = fullPath.split(/[/\\]/).pop();
+
+            const tracked = AppState.exportTracker?.[fullPath] ?? null;
+            const count = (tracked && Number.isFinite(tracked.exportCount))
+                ? tracked.exportCount
+                : null;
+
+            // exported styling
+            if (count != null) {
+                item.classList.add("exported");
+                item.title = `Exported ${count} segment${count === 1 ? "" : "s"}`;
+            }
+
+            const countEl = document.createElement("span");
+            countEl.className = "fileDropdownCount";
+            countEl.textContent = (count == null) ? "—" : String(count);
+
+            const nameEl = document.createElement("span");
+            nameEl.className = "fileDropdownName";
+            nameEl.textContent = fileName;
+
+            item.append(countEl, nameEl);
 
             if (idx === AppState.fileIndex) {
                 item.classList.add("active");

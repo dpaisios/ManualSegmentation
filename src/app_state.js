@@ -1,13 +1,8 @@
-// -------------------------------------------------------------
-// app_state.js
-// Central application state (single source of truth)
-// -------------------------------------------------------------
-
 export const AppState = {
 
     // folder navigation
     fileList: null,      // array of absolute paths
-    fileIndex: -1,        // current index in fileList
+    fileIndex: -1,       // current index in fileList
 
     // lifecycle
     dataLoaded: false,
@@ -22,14 +17,26 @@ export const AppState = {
     detectedCols: null,
     originalRaw: null,
     originalFileName: null,
+    originalFilePath: null,
 
     // selections
     selections: [],
+
+    // increments whenever selections or IDs change
+    selectionsVersion: 0,
 
     // export destination policy
     exportConfig: {
         mode: "relative",
         fixedPath: null
     },
-    originalFilePath: null,
+
+    // ---------------------------------------------------------
+    // Export tracking (session-scoped)
+    // ---------------------------------------------------------
+    // absoluteFilePath -> { exportCount, exportedAt }
+    exportTracker: {},
+
+    // absoluteFilePath -> selectionsVersion at last export
+    lastExportedVersionByFile: {},
 };

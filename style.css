@@ -306,6 +306,36 @@ canvas {
     font-weight: 500;
 }
 
+.fileDropdownItem {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.fileDropdownCount {
+    width: 28px;              /* fixed “column” width */
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: rgba(0,0,0,0.55);
+    flex: 0 0 auto;
+}
+
+.fileDropdownName {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fileDropdownItem.exported {
+    background: rgba(34, 197, 94, 0.08); /* subtle green tint */
+}
+
+.fileDropdownItem.exported:hover {
+    background: rgba(34, 197, 94, 0.14);
+}
+
 #exportOptions {
     margin-top: 14px;
     padding-top: 12px;

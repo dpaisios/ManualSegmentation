@@ -9,9 +9,7 @@ export function createExportController({
     buildExportJSON
 }) {
     async function exportData() {
-        // -----------------------------------------------------
-        // Validation (unchanged)
-        // -----------------------------------------------------
+
         if (!AppState.detectedCols) {
             alert("No detected column mapping.");
             return false;
@@ -32,9 +30,6 @@ export function createExportController({
             return false;
         }
 
-        // -----------------------------------------------------
-        // Build export payload (unchanged)
-        // -----------------------------------------------------
         const rows = extractRowsForExport(
             AppState.originalRaw,
             AppState.selections,
@@ -42,15 +37,12 @@ export function createExportController({
         );
 
         if (!rows.length) {
-            alert("Export produced no rows (selection/data mismatch).");
+            alert("Export produced no rows.");
             return false;
         }
 
         const txt = buildExportJSON(rows);
 
-        // -----------------------------------------------------
-        // Resolve export policy
-        // -----------------------------------------------------
         const cfg = AppState.exportConfig ?? { mode: "manual" };
 
         const base =
@@ -60,9 +52,9 @@ export function createExportController({
 
         const outName = `${base}_segmented.json`;
 
-        // -----------------------------------------------------
+        // -------------------------------------------------
         // MANUAL MODE
-        // -----------------------------------------------------
+        // -------------------------------------------------
         if (cfg.mode === "manual") {
             const blob = new Blob([txt], { type: "application/json" });
             const url  = URL.createObjectURL(blob);
@@ -73,15 +65,16 @@ export function createExportController({
             a.click();
 
             URL.revokeObjectURL(url);
+
+            recordSuccessfulExport();
             return true;
         }
 
-        // -----------------------------------------------------
-        // AUTOMATIC MODES (relative / fixed)
-        // -----------------------------------------------------
+        // -------------------------------------------------
+        // AUTOMATIC MODES
+        // -------------------------------------------------
         let exportDir = null;
 
-        // FIXED: exactly what the user chose
         if (cfg.mode === "fixed") {
             exportDir = cfg.fixedPath;
             if (!exportDir) {
@@ -90,10 +83,9 @@ export function createExportController({
             }
         }
 
-        // RELATIVE: <load-location>/Segmented
         if (cfg.mode === "relative") {
             if (!AppState.originalFilePath) {
-                alert("Missing source file path for export.");
+                alert("Missing source file path.");
                 return false;
             }
 
@@ -104,19 +96,34 @@ export function createExportController({
                 window.electronAPI.join(loadDir, "Segmented");
         }
 
-        // -----------------------------------------------------
-        // Write file (NO prompt)
-        // -----------------------------------------------------
         try {
             window.electronAPI.mkdir(exportDir, { recursive: true });
             const outPath = window.electronAPI.join(exportDir, outName);
             window.electronAPI.writeFile(outPath, txt);
+
+            recordSuccessfulExport();
             return true;
         } catch (err) {
             console.error(err);
             alert("Failed to write export file.");
             return false;
         }
+    }
+
+    // -------------------------------------------------
+    // INTERNAL helper
+    // -------------------------------------------------
+    function recordSuccessfulExport() {
+        const path = AppState.originalFilePath;
+        if (!path) return;
+
+        AppState.exportTracker[path] = {
+            exportCount: AppState.selections.length,
+            exportedAt: Date.now()
+        };
+
+        AppState.lastExportedVersionByFile[path] =
+            AppState.selectionsVersion;
     }
 
     return { exportData };

@@ -13,7 +13,8 @@ export function attachXYController({
     canvas,
     AppState,
     renderers,
-    computeTimeRangesFromXYBox
+    computeTimeRangesFromXYBox,
+    onSelectionsChanged = null
 }) {
     let selecting = false;
     let dragMode  = null;
@@ -109,6 +110,9 @@ export function attachXYController({
             setSelections: s => { AppState.selections = s; },
             ranges: tempTimeRanges
         });
+
+        // mark selections as dirty
+        AppState.selectionsVersion++;
 
         resetSelection();
         renderers.redrawXY();

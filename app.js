@@ -298,6 +298,7 @@ const labelEditor = createLabelEditor({
         if (value !== "" && value !== prev) {
             sel.id = value;
             sel.lockedID = true;
+            AppState.selectionsVersion++;
         }
 
         ID.recomputeAutoIDs(AppState.selections);
@@ -313,7 +314,10 @@ const timeBarController = attachTimeBarController({
     canvas: timeCanvas,
     ctx: timeCtx,
     getSelections: () => AppState.selections,
-    setSelections: s => { AppState.selections = s; },
+    setSelections: s => {
+        AppState.selections = s;
+        AppState.selectionsVersion++;
+    },
     T,
     Tip,
     labelEditor,

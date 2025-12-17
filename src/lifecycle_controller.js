@@ -28,6 +28,9 @@ export function attachLifecycleController({
         AppState.selections = [];
         AppState.dataLoaded = false;
 
+        // reset "dirty" tracker for the newly loaded file
+        AppState.selectionsVersion = 0;
+
         // Loader module state (CRITICAL)
         resetLoaderState();
     }
@@ -94,11 +97,32 @@ export function attachLifecycleController({
         if (!AppState.fileList) return;
         if (idx < 0 || idx >= AppState.fileList.length) return;
 
-        // --- UNSAVED SELECTION GUARD ---
-        if (AppState.selections && AppState.selections.length > 0) {
+        // --- UNSAVED SELECTION GUARD (EXPORT-AWARE) ---
+        const curPath = AppState.originalFilePath;
+
+        const hasSelections =
+            AppState.selections && AppState.selections.length > 0;
+
+        const exportedInfo =
+            curPath ? AppState.exportTracker?.[curPath] ?? null : null;
+
+        const exportedCount =
+            exportedInfo ? exportedInfo.exportCount : null;
+
+        const currentCount =
+            AppState.selections?.length ?? 0;
+
+        const unexported =
+            hasSelections &&
+            (
+                exportedInfo === null ||
+                exportedCount !== currentCount
+            );
+
+        if (unexported) {
             const ok = window.confirm(
                 "You have unexported selections.\n" +
-                "Loading another file will discard them\n\n" +
+                "Loading another file will discard them.\n\n" +
                 "Do you want to continue?"
             );
             if (!ok) return;
