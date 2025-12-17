@@ -197,7 +197,11 @@ export function attachLifecycleController({
     // ---------------------------------------------------------
     async function loadNewestFileInFolder(folder, params) {
         const files = window.electronAPI.listJson(folder);
+
+        console.log("[TEMPDATA] listJson →", files);
+
         if (!files.length) {
+            console.warn("[TEMPDATA] no json files found");
             showOverlay();
             return;
         }
@@ -218,6 +222,8 @@ export function attachLifecycleController({
             showOverlay();
             return;
         }
+
+        console.log("[TEMPDATA] loading newest =", newestPath);
 
         resetForNewFile();
 
@@ -246,22 +252,53 @@ export function attachLifecycleController({
     // LOAD ENTRY POINT (FILE OR FOLDER)
     // ---------------------------------------------------------
     async function loadFromPath(folder, params = {}) {
+        console.log(
+            "[LIFECYCLE] loadFromPath",
+            "folder =", folder,
+            "params =", params
+        );
+
         if (!folder) {
+            console.log("[LIFECYCLE] no folder → showOverlay");
             showOverlay();
             return;
         }
 
-        if (window.electronAPI.isDirectory(folder)) {
+        const isDir = window.electronAPI.isDirectory(folder);
+        console.log("[LIFECYCLE] isDirectory =", isDir);
+
+        // -----------------------------------------------------
+        // EXPLICIT RESET FOR NEW FOLDER SESSION
+        // -----------------------------------------------------
+        if (params.reset) {
+            console.log("[LIFECYCLE] RESETTING SESSION STATE");
+            AppState.fileList  = null;
+            AppState.fileIndex = -1;
+            AppState.exportTracker = {};
+            AppState.lastExportedVersionByFile = {};
+        }
+
+        // -----------------------------------------------------
+        // FOLDER MODE
+        // -----------------------------------------------------
+        if (isDir) {
 
             if (params.mode === "tempdata") {
+                console.log("[LIFECYCLE] entering TEMPDATA mode");
                 await loadNewestFileInFolder(folder, params);
                 return;
             }
 
+            console.log("[LIFECYCLE] entering FOLDER-SESSION mode");
+
             const entries = await listFlatFiles(folder);
+            console.log("[LIFECYCLE] listFlatFiles →", entries.length);
+
             const formats = detectAcceptedFormats(entries);
+            console.log("[LIFECYCLE] detected formats →", formats);
 
             if (!formats.length) {
+                console.warn("[LIFECYCLE] no accepted formats found");
                 alert("No supported data files found (json, csv, txt).");
                 showOverlay();
                 return;
@@ -278,6 +315,7 @@ export function attachLifecycleController({
 
                 chosenExts = await showFormatSelectionModal(formatCounts);
                 if (!chosenExts) {
+                    console.warn("[LIFECYCLE] format selection cancelled");
                     showOverlay();
                     return;
                 }
@@ -288,6 +326,8 @@ export function attachLifecycleController({
                 .map(e => e.full)
                 .sort();
 
+            console.log("[LIFECYCLE] files selected →", files.length);
+
             if (!files.length) {
                 alert("No files matched the selected format(s).");
                 showOverlay();
@@ -296,8 +336,13 @@ export function attachLifecycleController({
 
             AppState.exportTracker = {};
             AppState.lastExportedVersionByFile = {};
-            AppState.fileList = files;
+            AppState.fileList  = files;
             AppState.fileIndex = 0;
+
+            console.log(
+                "[LIFECYCLE] starting folder session",
+                "fileList.length =", files.length
+            );
 
             await scanExportsForFolderSession({
                 AppState,
@@ -309,10 +354,14 @@ export function attachLifecycleController({
             return;
         }
 
+        // -----------------------------------------------------
         // FILE MODE
+        // -----------------------------------------------------
+        console.log("[LIFECYCLE] entering FILE mode");
+
         resetForNewFile();
 
-        const txt = await window.electronAPI.readFile(folder);
+        const txt  = await window.electronAPI.readFile(folder);
         const rows = parseData(txt, folder);
 
         loadData(
@@ -326,7 +375,7 @@ export function attachLifecycleController({
 
         AppState.originalFileName = fileName;
         AppState.originalFilePath = folder;
-        AppState.fileList = null;
+        AppState.fileList  = null;
         AppState.fileIndex = -1;
         AppState.dataLoaded = true;
 
@@ -340,6 +389,11 @@ export function attachLifecycleController({
     // ---------------------------------------------------------
     function attachElectronListener() {
         window.electronAPI.onDataFile(({ folder, params }) => {
+            console.log(
+                "[LIFECYCLE] onDataFile received",
+                "folder =", folder,
+                "params =", params
+            );
             loadFromPath(folder, params);
         });
     }

@@ -258,10 +258,20 @@ export function attachTitleBar({
         e.preventDefault();
         e.stopPropagation();
 
+        console.log(
+            "[TITLEBAR] folderBtn mousedown",
+            "AppState.fileList =", AppState.fileList
+        );
+
         // OPEN FILE MODE
         if (!AppState.fileList) {
             const res = await window.electronAPI.openFileDialog();
             if (res.canceled) return;
+
+            console.log(
+                "[TITLEBAR] open-file selected",
+                res.filePaths[0]
+            );
 
             window.electronAPI.emitDataFile({
                 folder: res.filePaths[0],
@@ -274,10 +284,22 @@ export function attachTitleBar({
         const res = await window.electronAPI.openFolderDialog();
         if (res.canceled) return;
 
-        window.electronAPI.emitDataFile({
+        console.log(
+            "[TITLEBAR] open-folder selected",
+            res.filePaths[0]
+        );
+
+        const payload = {
             folder: res.filePaths[0],
-            params: { mode: "folder-session" }
-        });
+            params: {
+                mode: "folder-session",
+                reset: true
+            }
+        };
+
+        console.log("[TITLEBAR] emitDataFile payload =", payload);
+
+        window.electronAPI.emitDataFile(payload);
     });
 
     // ---------------------------------------------------------

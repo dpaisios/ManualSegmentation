@@ -53,6 +53,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     onDataFile: (callback) =>
         ipcRenderer.on("startup-data-file", (_, payload) => callback(payload)),
 
-    emitDataFile: (payload) =>
-        ipcRenderer.send("startup-data-file", payload)
+    emitDataFile: (payload) => {
+        console.log("[PRELOAD] emitDataFile", payload);
+        ipcRenderer.send("startup-data-file", payload);
+    }
+
 });

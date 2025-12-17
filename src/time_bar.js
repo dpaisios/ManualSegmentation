@@ -137,6 +137,9 @@ function drawSplitPreviewLine(ctx, x, barY0, barY1) {
 // -------------------------------------------------------------
 // Full redraw
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// Full redraw
+// -------------------------------------------------------------
 export function drawTimeBar(
     ctx,
     T, Tip,
@@ -210,7 +213,12 @@ export function drawTimeBar(
     }
 
     // ---------------------------------------------------------
-    // 3) Selections (unchanged)
+    // 2.5) XY-selected temporal ranges (RESTORED)
+    // ---------------------------------------------------------
+    applyXYDimMask(ctx, T, W, H);
+
+    // ---------------------------------------------------------
+    // 3) Selections
     // ---------------------------------------------------------
     const { side, triOffset } = getHandleSizes(H);
     const triY = barY0 - triOffset;
@@ -290,11 +298,11 @@ export function drawTimeBar(
         const x1 = leftPad + rel1 * barWidth;
 
         const barH  = barY1 - barY0;
-        const bandH = barH * 1/3;
+        const bandH = barH * 1 / 3;
         const bandY = barY0 + (barH - bandH) / 2;
 
         ctx.save();
-        ctx.fillStyle = "rgba(43,176,166,.8)"; // now truly opaque
+        ctx.fillStyle = "rgba(43,176,166,.8)";
         ctx.fillRect(x0, bandY, x1 - x0, bandH);
         ctx.restore();
     }
