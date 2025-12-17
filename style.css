@@ -112,7 +112,7 @@ body {
 #titleBar button svg {
     pointer-events: none;
     width: 25px;
-    height: 25px;  
+    height: 25px;
 }
 
 #titleBar button:hover:not(:disabled) {
@@ -136,7 +136,9 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    overflow: hidden;
+
+    position: relative;   /* REQUIRED for SVG overlay */
+    overflow: visible;    /* CRITICAL: do NOT clip overlay icons */
 }
 
 /* CANVASES --------------------------------------------------- */
@@ -169,7 +171,17 @@ canvas {
     pointer-events: auto;
 }
 
-/* OVERLAY ---------------------------------------------------- */
+/* SVG OVERLAY ------------------------------------------------ */
+
+#svgOverlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 10;
+}
+
+/* FILE OVERLAY ----------------------------------------------- */
 
 #fileOverlay {
     position: fixed;

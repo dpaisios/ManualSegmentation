@@ -44,10 +44,21 @@
         </div>
     </div>
 
-    <div id="appContainer" class="hiddenUntilData">
+    <!-- APP CONTAINER -->
+    <div id="appContainer" class="hiddenUntilData" style="position: relative;">
         <canvas id="xyCanvas"></canvas>
         <canvas id="timeCanvas"></canvas>
         <canvas id="settingsCanvas"></canvas>
+    </div>
+    
+    <!-- GENERIC SVG OVERLAY (for crisp icons, markers, etc.) -->
+    <div id="svgOverlay"
+        style="
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: visible;
+        ">
     </div>
 
     <script src="app.bundle.js"></script>

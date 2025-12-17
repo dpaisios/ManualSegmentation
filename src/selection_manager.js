@@ -154,3 +154,59 @@ export function clampNewSelectionTime(selections, tAnchor, tCurr) {
         return Math.max(tCurr, limitLeft);
     }
 }
+
+// -------------------------------------------------------------
+// Split selection
+// - validates by click in time bar
+// - uses index-based guard if T is provided
+// -------------------------------------------------------------
+export function splitSelection(selections, targetSel, tSplit, T) {
+    if (!targetSel) return selections;
+    if (!(tSplit > targetSel.t0 && tSplit < targetSel.t1)) return selections;
+
+    // optional safety: ensure at least 1 sample on each side
+    if (Array.isArray(T) && T.length > 2) {
+        let start = 0;
+        while (start < T.length && T[start] < targetSel.t0) start++;
+        let end = start;
+        while (end < T.length && T[end] < targetSel.t1) end++;
+
+        // nearest index to split
+        let i = start;
+        let best = Infinity;
+        for (let k = start; k <= end && k < T.length; k++) {
+            const d = Math.abs(T[k] - tSplit);
+            if (d < best) {
+                best = d;
+                i = k;
+            }
+        }
+
+        if (i <= start || i >= end) return selections;
+    }
+
+    const oldT1 = targetSel.t1;
+
+    // mutate left in place
+    targetSel.t1 = tSplit;
+
+    // create right
+    const right = makeSelectionObject(tSplit, oldT1);
+
+    if (targetSel.lockedID && targetSel.id != null && targetSel.id !== "") {
+
+        const base = String(targetSel.id);
+
+        // Left segment becomes base_1
+        targetSel.id = base + "_1";
+        targetSel.lockedID = true;
+
+        // Right segment becomes base_2
+        right.id = base + "_2";
+        right.lockedID = true;
+    }
+
+    const next = [...selections, right].sort((a, b) => (a.t0 - b.t0) || (a.t1 - b.t1));
+    ID.recomputeAutoIDs(next);
+    return next;
+}

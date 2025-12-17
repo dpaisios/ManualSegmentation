@@ -1,28 +1,24 @@
 // -------------------------------------------------------------
 // time_bar.js — time bar with XY-based temporal dimming
-// and clustered hover controls (delete + label)
+// time bar rendering (background, handles, split preview)
 // -------------------------------------------------------------
 
 import { isEditingSelection } from "./label_editor.js";
 import {
     timeBarGeom,
     getIndexRange,
-    getHandleSizes,
-    getDeleteBubbleSize
+    getHandleSizes
 } from "./time_bar_geom.js";
 import {
     drawTriangle,
     drawTimeSubSegment,
-    computeClusterLayout,
-    getLabelText,
-    CLUSTER_GAP,
     LABEL_FONT
 } from "./time_bar_primitives.js";
 import { computeTimeTicks } from "./time_scale.js";
 import { drawMissingTimeHatch } from "./visibility.js";
 
 // -------------------------------------------------------------
-// Hit testing
+// Hit testing (handles only; cluster is now in primitives)
 // -------------------------------------------------------------
 export function hitTestHandleRect(
     xClick, yClick,
@@ -55,44 +51,6 @@ export function hitTestHandleRect(
         xClick >= xMin && xClick <= xMax &&
         yClick >= yMin && yClick <= yMax
     );
-}
-
-// ID label rect (used also by app.js for DOM input)
-export function getLabelRect(ctx, sel, T, W, H) {
-    const cluster = computeClusterLayout(ctx, sel, T, W, H);
-    return { ...cluster.label };
-}
-
-// Delete bubble hit-test: match drawDeleteBubble geometry
-export function hitTestDeleteBubble(
-    xClick, yClick,
-    sel, T,
-    leftPad, barWidth, barY0,
-    tMin, tMax,
-    H
-) {
-    if (!sel) return false;
-
-    const x0 = leftPad + (sel.t0 - tMin) / (tMax - tMin) * barWidth;
-    const x1 = leftPad + (sel.t1 - tMin) / (tMax - tMin) * barWidth;
-
-    const { side, triOffset } = getHandleSizes(H);
-    const triY   = barY0 - triOffset * 2;
-    const height = Math.sqrt(3) * side / 2;
-    const halfH  = height / 2;
-
-    const { radius } = getDeleteBubbleSize(H);
-    const inwardTipY = triY - halfH;
-
-    // match computeClusterLayout geometry
-    const mid      = (x0 + x1) / 2;
-    const bubbleCx = mid - (radius + CLUSTER_GAP / 2);
-    const bubbleCy = inwardTipY - radius;
-
-    const dx = xClick - bubbleCx;
-    const dy = yClick - bubbleCy;
-
-    return dx * dx + dy * dy <= radius * radius;
 }
 
 // -------------------------------------------------------------
@@ -148,6 +106,35 @@ function applyXYDimMask(ctx, T, W, H) {
 }
 
 // -------------------------------------------------------------
+// Split line preview (time bar)
+// -------------------------------------------------------------
+function drawSplitPreviewLine(ctx, x, barY0, barY1) {
+    ctx.save();
+
+    // 1) Dark outline (contrast layer)
+    ctx.strokeStyle = "rgba(43,176,166,0.95)";
+    ctx.lineWidth   = 5;
+    ctx.setLineDash([]);
+
+    ctx.beginPath();
+    ctx.moveTo(x, barY0 - 8);
+    ctx.lineTo(x, barY1 + 8);
+    ctx.stroke();
+
+    // 2) Bright core (precision layer)
+    ctx.strokeStyle = "rgba(255,255,255,0.95)";
+    ctx.lineWidth   = 2;
+    ctx.setLineDash([4, 4]);
+
+    ctx.beginPath();
+    ctx.moveTo(x, barY0 - 8);
+    ctx.lineTo(x, barY1 + 8);
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+// -------------------------------------------------------------
 // Full redraw
 // -------------------------------------------------------------
 export function drawTimeBar(
@@ -156,8 +143,9 @@ export function drawTimeBar(
     selections,
     tempSel,
     hoveredHandle,
-    deleteTarget,   // kept for signature parity; not used directly
+    deleteTarget,
     W, H,
+    splitState
 ) {
     if (!T || T.length === 0) {
         ctx.clearRect(0, 0, W, H);
@@ -170,7 +158,9 @@ export function drawTimeBar(
 
     ctx.clearRect(0, 0, W, H);
 
+    // ---------------------------------------------------------
     // 1) Base Tip-coloured background
+    // ---------------------------------------------------------
     let segStart = 0;
     let lastTip  = Tip[0];
 
@@ -186,6 +176,7 @@ export function drawTimeBar(
             lastTip  = Tip[i];
         }
     }
+
     {
         const x0 = leftPad + (T[segStart]     - tMin) / (tMax - tMin) * barWidth;
         const x1 = leftPad + (T[T.length - 1] - tMin) / (tMax - tMin) * barWidth;
@@ -194,14 +185,12 @@ export function drawTimeBar(
         ctx.fillRect(x0, barY0, x1 - x0, barY1 - barY0);
     }
 
-    // 1b) XY temporal highlight under selections
-    // Missing-time overlay
     drawMissingTimeHatch(ctx, T, W, H);
-
-    // XY temporal highlight under selections
     applyXYDimMask(ctx, T, W, H);
 
+    // ---------------------------------------------------------
     // 2) Ticks
+    // ---------------------------------------------------------
     ctx.strokeStyle  = "black";
     ctx.fillStyle    = "black";
     ctx.font         = LABEL_FONT;
@@ -222,7 +211,9 @@ export function drawTimeBar(
         ctx.fillText(label, xp, barY1 + 8);
     }
 
+    // ---------------------------------------------------------
     // 3) Selections (real + temp)
+    // ---------------------------------------------------------
     const { side, triOffset } = getHandleSizes(H);
     const triY = barY0 - triOffset;
 
@@ -230,9 +221,8 @@ export function drawTimeBar(
         const x0 = leftPad + (sel.t0 - tMin) / (tMax - tMin) * barWidth;
         const x1 = leftPad + (sel.t1 - tMin) / (tMax - tMin) * barWidth;
 
-        // Subsegments coloured by Tip
         const [startIdx, endIdx] = getIndexRange(T, sel.t0, sel.t1);
-        let lastTip = Tip[startIdx];
+        let lastTip  = Tip[startIdx];
         let segStart = startIdx;
 
         for (let i = startIdx + 1; i <= endIdx; i++) {
@@ -255,7 +245,6 @@ export function drawTimeBar(
             tMin, tMax
         );
 
-        // Handles with hover colour
         const baseColor  = "rgba(24,18,18,1)";
         const hoverColor = "rgba(119,115,107,1)";
 
@@ -269,7 +258,6 @@ export function drawTimeBar(
             hoveredHandle.sel === sel &&
             hoveredHandle.side === "right";
 
-        // Left handle
         ctx.fillStyle   = leftHovered ? hoverColor : baseColor;
         ctx.strokeStyle = ctx.fillStyle;
         ctx.lineWidth   = 2;
@@ -279,7 +267,6 @@ export function drawTimeBar(
         ctx.lineTo(x0, barY1);
         ctx.stroke();
 
-        // Right handle
         ctx.fillStyle   = rightHovered ? hoverColor : baseColor;
         ctx.strokeStyle = ctx.fillStyle;
         ctx.lineWidth   = 2;
@@ -288,66 +275,24 @@ export function drawTimeBar(
         ctx.moveTo(x1, triY);
         ctx.lineTo(x1, barY1);
         ctx.stroke();
-
-        // Clustered hover controls (delete + label)
-        if (sel.bubbleAlpha > 0.01) {
-            const cluster = computeClusterLayout(ctx, sel, T, W, H);
-            const { bubble, label } = cluster;
-            const alpha = sel.bubbleAlpha;
-
-            // Delete bubble
-            ctx.save();
-            ctx.globalAlpha = alpha;
-
-            ctx.beginPath();
-            ctx.arc(bubble.cx, bubble.cy, bubble.r, 0, Math.PI * 2);
-            ctx.fillStyle = "rgba(236,60,60,0.95)";
-            ctx.fill();
-
-            ctx.beginPath();
-            ctx.arc(bubble.cx, bubble.cy, bubble.r, 0, Math.PI * 2);
-            ctx.strokeStyle = "rgba(24,18,18,1)";
-            ctx.lineWidth   = 1.5;
-            ctx.stroke();
-
-            ctx.strokeStyle = "rgba(248,243,239,1)";
-            ctx.lineWidth   = 2;
-            const xSize = bubble.r * 0.38;
-
-            ctx.beginPath();
-            ctx.moveTo(bubble.cx - xSize, bubble.cy - xSize);
-            ctx.lineTo(bubble.cx + xSize, bubble.cy + xSize);
-            ctx.moveTo(bubble.cx + xSize, bubble.cy - xSize);
-            ctx.lineTo(bubble.cx - xSize, bubble.cy + xSize);
-            ctx.stroke();
-
-            // Label box
-            // ----------------------------------------------
-            // Skip drawing label box entirely while editing
-            // ----------------------------------------------
-            if (!isEditingSelection(sel)) {
-                const text = getLabelText(sel);
-
-                ctx.fillStyle   = "rgba(255,255,255,0.95)";
-                ctx.strokeStyle = "rgba(0,0,0,0.8)";
-                ctx.lineWidth   = 1;
-                ctx.fillRect(label.x, label.y, label.w, label.h);
-                ctx.strokeRect(label.x, label.y, label.w, label.h);
-
-                ctx.fillStyle    = "black";
-                ctx.font         = LABEL_FONT;
-                ctx.textAlign    = "center";
-                ctx.textBaseline = "middle";
-                ctx.fillText(
-                    text,
-                    label.x + label.w / 2,
-                    label.y + label.h / 2
-                );
-            }
-            ctx.restore();
-        }
     }
 
-    for (let sel of selections) drawOneSelection(sel);
+    for (const sel of selections) drawOneSelection(sel);
     if (tempSel) drawOneSelection(tempSel);
+
+    // ---------------------------------------------------------
+    // 4) Split preview line
+    // ---------------------------------------------------------
+    if (splitState?.active && splitState?.t != null) {
+        const x = leftPad + (splitState.t - tMin) / (tMax - tMin) * barWidth;
+        const xp = Math.round(x) + 0.5;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, barY0 - 14, W, (barY1 - barY0) + 28);
+        ctx.clip();
+
+        drawSplitPreviewLine(ctx, xp, barY0, barY1);
+        ctx.restore();
+    }
 }

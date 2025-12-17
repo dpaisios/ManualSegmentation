@@ -1,6 +1,6 @@
 // -------------------------------------------------------------
 // time_bar_controller.js
-// Handles ALL time bar interactions (mouse, hover, drag, delete)
+// Handles ALL time bar interactions (mouse, hover, drag, delete, split)
 // -------------------------------------------------------------
 
 import {
@@ -22,6 +22,12 @@ import {
 } from "./label_editor.js";
 
 import { clamp } from "./geometry.js";
+
+import {
+    getClusterLabelRect,
+    hitTestClusterSplit,
+    hitTestClusterDelete
+} from "./time_bar_primitives.js";
 
 export function attachTimeBarController({
     canvas,
@@ -57,6 +63,10 @@ export function attachTimeBarController({
     let hoveredHandle = null;   // { sel, side } | null
     let deleteTarget  = null;   // sel | null
 
+    // Split mode
+    let splitMode    = false;
+    let splitTarget  = null;    // sel | null
+    let splitTime    = null;    // number | null (hover)
     // ---------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------
@@ -77,6 +87,39 @@ export function attachTimeBarController({
         deleteTarget  = null;
     }
 
+    function exitSplitMode() {
+        splitMode   = false;
+        splitTarget = null;
+        splitTime   = null;
+    }
+
+    function barHit(x, y) {
+        const { leftPad, barWidth, barY0, barY1 } =
+            timeBarGeom(canvas.width, canvas.height);
+
+        const leftExt  = leftPad * (1 / 3);
+        const rightExt = (canvas.width - (leftPad + barWidth)) * (1 / 3);
+
+        const barClickable =
+            x >= (leftPad - leftExt) &&
+            x <= (leftPad + barWidth + rightExt) &&
+            y >= barY0 && y <= barY1;
+
+        return { barClickable, leftPad, barWidth, barY0, barY1 };
+    }
+
+    // ESC exits split mode (recommended UX)
+    window.addEventListener("keydown", e => {
+        if (e.key === "Escape" && splitMode) {
+            exitSplitMode();
+            clearDragState();
+            clearHoverState();
+            canvas.style.cursor = "default";
+            redrawTimeBar();
+            redrawXY();
+        }
+    });
+
     // ---------------------------------------------------------
     // MOUSEDOWN
     // ---------------------------------------------------------
@@ -89,15 +132,64 @@ export function attachTimeBarController({
         // Block all interactions while editing a label
         if (anyEditingSelectionIn(selections)) return;
 
-        const { leftPad, barWidth, barY0, barY1 } =
-            timeBarGeom(canvas.width, canvas.height);
-
         const x = e.offsetX;
         const y = e.offsetY;
 
+        const { barClickable, leftPad, barWidth, barY0, barY1 } = barHit(x, y);
         const { tMin, tMax } = getTimeBoundsFromT(T);
 
         ctx.font = "12px sans-serif";
+
+        // -------------------------------------------------
+        // Split mode: validate OR cancel
+        // -------------------------------------------------
+        if (splitMode) {
+
+            // Convert click to bar + time if applicable
+            let tClick = null;
+            if (barClickable) {
+                const xc = clamp(x, leftPad, leftPad + barWidth);
+                tClick = pixelToTime(xc, leftPad, barWidth, tMin, tMax);
+            }
+
+            // CASE 1 — Click INSIDE active selection → validate split
+            if (
+                barClickable &&
+                splitTarget &&
+                tClick != null &&
+                tClick > splitTarget.t0 &&
+                tClick < splitTarget.t1
+            ) {
+                const next = Select.splitSelection(
+                    selections,
+                    splitTarget,
+                    tClick,
+                    T
+                );
+
+                setSelections(next);
+                ID.recomputeAutoIDs(next);
+
+                exitSplitMode();
+                clearDragState();
+                clearHoverState();
+
+                canvas.style.cursor = "default";
+                redrawTimeBar();
+                redrawXY();
+                return;
+            }
+
+            // CASE 2 — ANY other click → cancel split mode
+            exitSplitMode();
+            clearDragState();
+            clearHoverState();
+
+            canvas.style.cursor = "default";
+            redrawTimeBar();
+            redrawXY();
+            return;
+        }
 
         // -------------------------------------------------
         // 0) Click on label to edit?
@@ -105,7 +197,7 @@ export function attachTimeBarController({
         for (const sel of selections) {
             if ((sel.bubbleAlpha ?? 0) <= 0.01) continue;
 
-            const r = TB.getLabelRect(ctx, sel, T, canvas.width, canvas.height);
+            const r = getClusterLabelRect(ctx, sel, T, canvas.width, canvas.height);
 
             if (
                 x >= r.x && x <= r.x + r.w &&
@@ -122,18 +214,32 @@ export function attachTimeBarController({
         }
 
         // -------------------------------------------------
-        // 1) Delete bubble click?
+        // 1) Split bubble click? (enter split mode)
+        // -------------------------------------------------
+        for (const sel of selections) {
+            if ((sel.bubbleAlpha ?? 0) <= 0.01) continue;
+
+            if (hitTestClusterSplit(ctx, x, y, sel, T, canvas.width, canvas.height)) {
+                splitMode   = true;
+                splitTarget = sel;
+                splitTime   = null;
+
+                clearDragState();
+                clearHoverState();
+
+                canvas.style.cursor = "crosshair";
+                redrawTimeBar();
+                redrawXY();
+                return;
+            }
+        }
+
+        // -------------------------------------------------
+        // 2) Delete bubble click?
         // -------------------------------------------------
         if (
             deleteTarget &&
-            TB.hitTestDeleteBubble(
-                x, y,
-                deleteTarget,
-                T,
-                leftPad, barWidth, barY0,
-                tMin, tMax,
-                canvas.height
-            )
+            hitTestClusterDelete(ctx, x, y, deleteTarget, T, canvas.width, canvas.height)
         ) {
             const next = Select.deleteSelection(deleteTarget, selections);
             setSelections(next);
@@ -150,7 +256,7 @@ export function attachTimeBarController({
         clearDragState();
 
         // -------------------------------------------------
-        // 2) Handle drags?
+        // 3) Handle drags?
         // -------------------------------------------------
         for (const sel of selections) {
             const x0 = leftPad + (sel.t0 - tMin) / (tMax - tMin) * barWidth;
@@ -172,16 +278,8 @@ export function attachTimeBarController({
         }
 
         // -------------------------------------------------
-        // 3) New selection creation
+        // 4) New selection creation
         // -------------------------------------------------
-        const leftExt  = leftPad * (1 / 3);
-        const rightExt = (canvas.width - (leftPad + barWidth)) * (1 / 3);
-
-        const barClickable =
-            x >= (leftPad - leftExt) &&
-            x <= (leftPad + barWidth + rightExt) &&
-            y >= barY0 && y <= barY1;
-
         if (
             barClickable &&
             !isPixelInsideAnySelection(
@@ -229,6 +327,33 @@ export function attachTimeBarController({
             deleteTarget  = editingSel;
             canvas.style.cursor = "default";
             redrawTimeBar();
+            return;
+        }
+
+        // -------------------------------------------------
+        // Split mode hover preview (time bar only)
+        // -------------------------------------------------
+        if (splitMode) {
+            hoveredHandle = null;
+            deleteTarget  = splitTarget;
+
+            const insideBar = (y >= barY0 && y <= barY1);
+            if (insideBar && splitTarget) {
+                let t = pixelToTime(x, leftPad, barWidth, tMin, tMax);
+
+                // Clamp split preview strictly to the active selection
+                if (t < splitTarget.t0) t = splitTarget.t0;
+                if (t > splitTarget.t1) t = splitTarget.t1;
+
+                splitTime = t;
+                canvas.style.cursor = "col-resize";
+            } else {
+                splitTime = null;
+                canvas.style.cursor = "default";
+            }
+
+            redrawTimeBar();
+            redrawXY();
             return;
         }
 
@@ -282,7 +407,7 @@ export function attachTimeBarController({
                 }
 
                 if (!hoveredSelection) {
-                    const r = TB.getLabelRect(ctx, sel, T, canvas.width, canvas.height);
+                    const r = getClusterLabelRect(ctx, sel, T, canvas.width, canvas.height);
                     if (
                         rawX >= r.x && rawX <= r.x + r.w &&
                         y    >= r.y && y    <= r.y + r.h
@@ -292,15 +417,13 @@ export function attachTimeBarController({
                 }
 
                 if (!hoveredSelection) {
-                    if (
-                        TB.hitTestDeleteBubble(
-                            rawX, y,
-                            sel, T,
-                            leftPad, barWidth, barY0,
-                            tMin, tMax,
-                            canvas.height
-                        )
-                    ) {
+                    if (hitTestClusterSplit(ctx, rawX, y, sel, T, canvas.width, canvas.height)) {
+                        hoveredSelection = sel;
+                    }
+                }
+
+                if (!hoveredSelection) {
+                    if (hitTestClusterDelete(ctx, rawX, y, sel, T, canvas.width, canvas.height)) {
                         hoveredSelection = sel;
                     }
                 }
@@ -317,6 +440,7 @@ export function attachTimeBarController({
             deleteTarget = hoveredSelection;
             canvas.style.cursor = "default";
             redrawTimeBar();
+            redrawXY();
             return;
         }
 
@@ -403,6 +527,11 @@ export function attachTimeBarController({
 
         const selections = getSelections() || [];
 
+        if (splitMode) {
+            // no-op; split commits on mousedown click inside bar
+            return;
+        }
+
         if (dragging && tempSelection && tempSelection.t1 > tempSelection.t0) {
             const next = Select.addOrMergeSelectionRange(
                 selections,
@@ -436,6 +565,14 @@ export function attachTimeBarController({
             return;
         }
 
+        if (splitMode) {
+            splitTime = null;
+            canvas.style.cursor = "default";
+            redrawTimeBar();
+            redrawXY();
+            return;
+        }
+
         clearHoverState();
         canvas.style.cursor = "default";
         redrawTimeBar();
@@ -449,6 +586,13 @@ export function attachTimeBarController({
             get hoveredHandle() { return hoveredHandle; },
             get deleteTarget()  { return deleteTarget; },
             get tempSelection() { return tempSelection; },
+            get split() {
+                return {
+                    active: splitMode,
+                    sel: splitTarget,
+                    t: splitTime
+                };
+            },
             get editingSel() {
                 const selections = getSelections() || [];
                 for (const sel of selections) {

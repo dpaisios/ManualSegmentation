@@ -35,6 +35,10 @@ import {
 import * as ID from "./src/selection_ids.js";
 import { createLabelEditor } from "./src/label_editor.js";
 import { attachTimeBarController } from "./src/time_bar_controller.js";
+import { placeIcon, clearOverlay, placeLabel } from "./src/icons_overlay.js";
+import {
+    computeClusterLayout
+} from "./src/time_bar_primitives.js";
 
 // -------------------------------------------------------------
 // Canvases
@@ -93,7 +97,11 @@ function redrawXY() {
         xyCanvas.height
     );
 
-    const tempSelection = timeBarController?.state?.tempSelection ?? null;
+    const tempSelection =
+        timeBarController?.state?.tempSelection ?? null;
+
+    const hoveredSel =
+        timeBarController?.state?.deleteTarget ?? null;
 
     XY.drawXYFromSelections(
         xyCtx,
@@ -105,7 +113,9 @@ function redrawXY() {
         transform,
         xyCanvas.width,
         xyCanvas.height,
-        visibility.showPenUp()
+        visibility.showPenUp(),
+        timeBarController.state.split,
+        hoveredSel
     );
 
     const box = xyController?.getSelectBox?.() ?? null;
@@ -126,11 +136,68 @@ function redrawTimeBar(state) {
         state.deleteTarget,
         timeCanvas.width,
         timeCanvas.height,
-        state.editingSel
+        state.split
     );
+
+    clearOverlay("timebar-");
+
+    const timeCanvasRect = timeCanvas.getBoundingClientRect();
+    const offsetX = timeCanvasRect.left + window.scrollX;
+    const offsetY = timeCanvasRect.top  + window.scrollY;
+
+    clearOverlay("timebar-label-");
+
+    for (let i = 0; i < AppState.selections.length; i++) {
+        const sel = AppState.selections[i];
+        if (sel.bubbleAlpha <= 0.01) continue;
+
+        const cluster = computeClusterLayout(
+            timeCtx,
+            sel,
+            T,
+            timeCanvas.width,
+            timeCanvas.height
+        );
+
+        const size = cluster.label.h;
+        const cy   = cluster.anchorY;
+
+        placeIcon({
+            id: `timebar-split-${i}`,
+            svgPath: "images/splitbubble.svg",
+            cx: offsetX + cluster.split.cx,
+            cy: offsetY + cy,
+            size,
+            opacity: sel.bubbleAlpha
+        });
+
+        placeIcon({
+            id: `timebar-delete-${i}`,
+            svgPath: "images/deletebubble.svg",
+            cx: offsetX + cluster.delete.cx,
+            cy: offsetY + cy,
+            size,
+            opacity: sel.bubbleAlpha
+        });
+
+        if (sel.id != null && sel.id !== "") {
+            placeLabel({
+                id: `timebar-label-${i}`,
+                x: offsetX + cluster.label.x,
+                y: offsetY + cluster.label.y,
+                w: cluster.label.w,
+                h: cluster.label.h,
+                text: String(sel.id),
+                opacity: sel.bubbleAlpha
+            });
+        }
+    }
 }
 
 function redrawSettings() {
+    // 🔒 Guard: settingsController may not exist during early init
+    if (!settingsController) return;
+
     const layout = drawSettings(
         settingsCtx,
         settingsCanvas.width,
@@ -164,8 +231,13 @@ const exportController = createExportController({
 const labelEditor = createLabelEditor({
     container: document.getElementById("appContainer"),
     onCommit: (sel, value) => {
-        sel.lockedID = value !== "";
-        if (value !== "") sel.id = value;
+        const prev = String(sel.id ?? "");
+
+        if (value !== "" && value !== prev) {
+            sel.id = value;
+            sel.lockedID = true;
+        }
+
         ID.recomputeAutoIDs(AppState.selections);
         renderers.redrawTimeBar();
     },
@@ -250,9 +322,7 @@ const lifecycle = attachLifecycleController({
     renderers
 });
 
-// Patch lifecycle into title bar (circular-safe)
 titleBarController.setLifecycle(lifecycle);
-
 lifecycle.attachElectronListener();
 
 lifecycle.attachManualOpen(
@@ -280,6 +350,21 @@ if (openFolderBtn) {
 // -------------------------------------------------------------
 // Resize
 // -------------------------------------------------------------
+function applyCanvasSizesNow() {
+    if (xyCanvas.clientWidth === 0 || xyCanvas.clientHeight === 0) return;
+    if (timeCanvas.clientWidth === 0 || timeCanvas.clientHeight === 0) return;
+    if (settingsCanvas.clientWidth === 0 || settingsCanvas.clientHeight === 0) return;
+
+    xyCanvas.width = xyCanvas.clientWidth;
+    xyCanvas.height = xyCanvas.clientHeight;
+
+    timeCanvas.width = timeCanvas.clientWidth;
+    timeCanvas.height = timeCanvas.clientHeight;
+
+    settingsCanvas.width = settingsCanvas.clientWidth;
+    settingsCanvas.height = settingsCanvas.clientHeight;
+}
+
 let resizePending = false;
 function resizeCanvases() {
     if (resizePending) return;
@@ -288,12 +373,7 @@ function resizeCanvases() {
     requestAnimationFrame(() => {
         resizePending = false;
 
-        xyCanvas.width = xyCanvas.clientWidth;
-        xyCanvas.height = xyCanvas.clientHeight;
-        timeCanvas.width = timeCanvas.clientWidth;
-        timeCanvas.height = timeCanvas.clientHeight;
-        settingsCanvas.width = settingsCanvas.clientWidth;
-        settingsCanvas.height = settingsCanvas.clientHeight;
+        applyCanvasSizesNow();
 
         AppState.dataLoaded
             ? renderers.redrawAll()
@@ -328,6 +408,7 @@ requestAnimationFrame(animate);
 // -------------------------------------------------------------
 // Init
 // -------------------------------------------------------------
-resizeCanvases();
+applyCanvasSizesNow();
 renderers.redrawSettings();
 titleBarController.updateTitleBar();
+resizeCanvases();

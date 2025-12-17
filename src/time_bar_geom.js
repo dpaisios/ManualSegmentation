@@ -2,7 +2,6 @@
 // -------------------------------------------------------------
 // Time bar geometry & coordinate helpers
 // -------------------------------------------------------------
-
 export function timeBarGeom(W, H) {
     const leftPad  = W * 0.05;
     const rightPad = W * 0.05;

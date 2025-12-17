@@ -153,6 +153,88 @@ export function drawXYHighlight(
 }
 
 // -------------------------------------------------------------
+// Split marker (perpendicular to curve)
+// -------------------------------------------------------------
+function drawPerpSplitMarker(
+    ctx, X, Y, T,
+    tSplit,
+    transform, W, H
+) {
+    if (tSplit == null) return;
+    if (!T || T.length < 3) return;
+
+    // nearest index
+    let i = 0;
+    let best = Infinity;
+    for (let k = 0; k < T.length; k++) {
+        const d = Math.abs(T[k] - tSplit);
+        if (d < best) {
+            best = d;
+            i = k;
+        }
+    }
+
+    const i0 = Math.max(0, i - 3);
+    const i1 = Math.min(T.length - 1, i + 3);
+
+    const x0 = X[i0], y0 = Y[i0];
+    const x1 = X[i1], y1 = Y[i1];
+
+    let vx = x1 - x0;
+    let vy = y1 - y0;
+    const len = Math.hypot(vx, vy);
+
+    if (!Number.isFinite(len) || len < 1e-12) return;
+
+    vx /= len;
+    vy /= len;
+
+    // perpendicular in data space
+    let nx = -vy;
+    let ny =  vx;
+
+    const px = toCanvasX(X[i], transform);
+    const py = toCanvasY(Y[i], H, transform);
+
+    // scale normal into screen space (approx)
+    const L = 10; // px half-length
+    // convert a tiny step in data space to screen to estimate scale
+    // (use transform.scale)
+    const sx = nx * (L / transform.scale);
+    const sy = ny * (L / transform.scale);
+
+    const ax = toCanvasX(X[i] - sx, transform);
+    const ay = toCanvasY(Y[i] - sy, H, transform);
+
+    const bx = toCanvasX(X[i] + sx, transform);
+    const by = toCanvasY(Y[i] + sy, H, transform);
+
+    ctx.save();
+
+    // glow
+    ctx.strokeStyle = "rgba(43,176,166,0.25)";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+
+    // crisp core
+    ctx.strokeStyle = "rgba(43,176,166,0.95)";
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+// -------------------------------------------------------------
+// Full XY redraw with selections
+// -------------------------------------------------------------
+// -------------------------------------------------------------
 // Full XY redraw with selections
 // -------------------------------------------------------------
 export function drawXYFromSelections(
@@ -164,12 +246,59 @@ export function drawXYFromSelections(
     transform,
     canvasWidth,
     canvasHeight,
-    showUp
+    showUp,
+    // optional: split state { active, sel, t }
+    splitState,
+    // optional: hovered selection from time bar (uses t0/t1)
+    hoveredSel = null
 ) {
-    drawXY(ctx, X, Y, Tip, TipSeg, visibleIdxs, transform, canvasWidth, canvasHeight);
+    // ---------------------------------------------------------
+    // State flags
+    // ---------------------------------------------------------
+    const splitting =
+        !!splitState?.active &&
+        !!splitState?.sel;
 
-    for (let sel of selections) {
-        let alpha = tempSel ? 0.4 : 0.75;
+    const hoverDimmingActive =
+        !!hoveredSel &&
+        !tempSel &&
+        !splitting &&
+        Number.isFinite(hoveredSel.t0) &&
+        Number.isFinite(hoveredSel.t1) &&
+        hoveredSel.t1 > hoveredSel.t0;
+
+    // ---------------------------------------------------------
+    // 1) Draw BASE XY trace 
+    // ---------------------------------------------------------
+    drawXY(
+        ctx,
+        X, Y, Tip, TipSeg,
+        visibleIdxs,
+        transform,
+        canvasWidth,
+        canvasHeight
+    );
+
+    // ---------------------------------------------------------
+    // 2) Draw selection highlights
+    // ---------------------------------------------------------
+    for (const sel of selections) {
+        let alpha;
+
+        if (tempSel) {
+            // temp selection creation dims everything uniformly
+            alpha = 0.4;
+        } else if (splitting) {
+            // split mode: active selection emphasized
+            alpha = (sel === splitState.sel) ? 0.9 : 0.25;
+        } else if (hoverDimmingActive) {
+            // hover time selection: hovered emphasized
+            alpha = (sel === hoveredSel) ? 0.9 : 0.15;
+        } else {
+            // normal state
+            alpha = 0.75;
+        }
+
         drawXYHighlight(
             ctx, X, Y, Tip, TipSeg,
             T, sel.t0, sel.t1, alpha,
@@ -178,12 +307,26 @@ export function drawXYFromSelections(
         );
     }
 
+    // ---------------------------------------------------------
+    // 3) Temp selection highlight (during creation)
+    // ---------------------------------------------------------
     if (tempSel) {
         drawXYHighlight(
             ctx, X, Y, Tip, TipSeg,
             T, tempSel.t0, tempSel.t1, 0.9,
             transform, canvasWidth, canvasHeight,
             showUp
+        );
+    }
+
+    // ---------------------------------------------------------
+    // 4) Split marker (unchanged)
+    // ---------------------------------------------------------
+    if (splitting && splitState.t != null) {
+        drawPerpSplitMarker(
+            ctx, X, Y, T,
+            splitState.t,
+            transform, canvasWidth, canvasHeight
         );
     }
 }

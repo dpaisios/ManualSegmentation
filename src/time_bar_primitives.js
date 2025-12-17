@@ -1,6 +1,7 @@
 // -------------------------------------------------------------
 // time_bar_primitives.js
 // Low-level drawing & layout primitives for time bar
+// (cluster visuals are overlay-owned)
 // -------------------------------------------------------------
 
 import {
@@ -11,14 +12,6 @@ import {
 
 export const CLUSTER_GAP = 6;
 export const LABEL_FONT = "12px sans-serif";
-
-// -------------------------------------------------------------
-// Label helper
-// -------------------------------------------------------------
-export function getLabelText(sel) {
-    if (sel.id != null && sel.id !== "") return String(sel.id);
-    return "";
-}
 
 // -------------------------------------------------------------
 // Triangle (handle) drawing
@@ -72,7 +65,8 @@ export function drawTimeSubSegment(
 }
 
 // -------------------------------------------------------------
-// Cluster layout (delete bubble + label)
+// Cluster layout (Split + Delete + Label)
+// Geometry only — rendering happens in overlay
 // -------------------------------------------------------------
 export function computeClusterLayout(ctx, sel, T, W, H) {
     const { leftPad, barWidth, barY0 } = timeBarGeom(W, H);
@@ -87,29 +81,109 @@ export function computeClusterLayout(ctx, sel, T, W, H) {
     const height = Math.sqrt(3) * side / 2;
     const halfH  = height / 2;
 
+    // Vertical anchor: tip of inward handle triangle
     const inwardTipY = triY - halfH;
 
     const { radius } = getDeleteBubbleSize(H);
+    const r = radius;
 
+    // Final cluster anchor (no baseline bias — overlay handles text)
+    const anchorY = inwardTipY - r;
+
+    // Horizontal anchor: selection midpoint
     const mid = (x0 + x1) / 2;
 
-    const bubbleCx = mid - (radius + CLUSTER_GAP / 2);
-    const bubbleCy = inwardTipY - radius;
+    // Virtual cluster width: [split][delete][label footprint]
+    const N = 3;
+    const virtualW = N * (2 * r) + (N - 1) * CLUSTER_GAP;
+    const leftEdge = mid - virtualW / 2;
 
-    const labelText = getLabelText(sel);
+    function centerOfItem(k) {
+        return leftEdge + r + k * (2 * r + CLUSTER_GAP);
+    }
+
+    // --- Label box (text width driven, position anchored) ---
+    const text = (sel.id != null && sel.id !== "") ? String(sel.id) : "";
     ctx.font = LABEL_FONT;
 
-    const textW = ctx.measureText(labelText).width;
+    const textW = ctx.measureText(text).width;
     const padX  = 6;
 
     const boxW = textW + padX * 2;
-    const boxH = 2 * radius;
+    const boxH = 2 * r;
 
-    const xLabel = mid + CLUSTER_GAP / 2;
-    const yLabel = bubbleCy - boxH / 2;
+    const labelCenterX = centerOfItem(2);
+    const virtualLeftEdge = labelCenterX - r;
+
+    const xLabel = Math.max(
+        virtualLeftEdge,
+        labelCenterX - boxW / 2
+    );
 
     return {
-        bubble: { cx: bubbleCx, cy: bubbleCy, r: radius },
-        label:  { x: xLabel, y: yLabel, w: boxW, h: boxH }
+        anchorY,
+
+        split: {
+            cx: centerOfItem(0),
+            cy: anchorY,
+            r
+        },
+
+        delete: {
+            cx: centerOfItem(1),
+            cy: anchorY,
+            r
+        },
+
+        label: {
+            x: xLabel,
+            y: anchorY - boxH / 2,
+            w: boxW,
+            h: boxH
+        },
+
+        // debug / future-proofing
+        mid,
+        r,
+        virtual: {
+            leftEdge,
+            width: virtualW
+        }
     };
+}
+
+// -------------------------------------------------------------
+// Cluster hit-testing helpers (geometry only)
+// -------------------------------------------------------------
+function hitCircle(xClick, yClick, cx, cy, r) {
+    const dx = xClick - cx;
+    const dy = yClick - cy;
+    return dx * dx + dy * dy <= r * r;
+}
+
+export function hitTestClusterSplit(ctx, xClick, yClick, sel, T, W, H) {
+    if (!sel) return false;
+    const cluster = computeClusterLayout(ctx, sel, T, W, H);
+    return hitCircle(
+        xClick, yClick,
+        cluster.split.cx,
+        cluster.split.cy,
+        cluster.split.r
+    );
+}
+
+export function hitTestClusterDelete(ctx, xClick, yClick, sel, T, W, H) {
+    if (!sel) return false;
+    const cluster = computeClusterLayout(ctx, sel, T, W, H);
+    return hitCircle(
+        xClick, yClick,
+        cluster.delete.cx,
+        cluster.delete.cy,
+        cluster.delete.r
+    );
+}
+
+export function getClusterLabelRect(ctx, sel, T, W, H) {
+    const cluster = computeClusterLayout(ctx, sel, T, W, H);
+    return { ...cluster.label };
 }

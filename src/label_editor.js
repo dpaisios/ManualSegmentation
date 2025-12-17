@@ -2,6 +2,7 @@
 // label_editor.js
 // Manages in-place editing of segment IDs
 // -------------------------------------------------------------
+import { getLabelBaselineBias } from "./time_bar_primitives.js";
 
 let activeSel = null;
 
@@ -64,7 +65,7 @@ export function createLabelEditor({ container, onCommit, onCancel }) {
         container.appendChild(input);
     }
 
-    function start(sel, rect, canvasRect, initialValue) {
+    function start(sel, labelRect, canvasRect, initialValue) {
         ensureInput();
 
         activeSel = sel;
@@ -72,13 +73,19 @@ export function createLabelEditor({ container, onCommit, onCancel }) {
 
         input.value = oldValue;
 
-        input.style.left   = (canvasRect.left + rect.x) + "px";
-        input.style.top    = (canvasRect.top  + rect.y) + "px";
-        input.style.width  = rect.w + "px";
-        input.style.height = rect.h + "px";
+        const containerRect = container.getBoundingClientRect();
+
+        input.style.left =
+            (canvasRect.left - containerRect.left) + labelRect.x + "px";
+
+        input.style.top =
+            (canvasRect.top - containerRect.top) + labelRect.y + "px";
+
+        input.style.width  = labelRect.w + "px";
+        input.style.height = labelRect.h + "px";
         input.style.display = "block";
 
-        // defer focus to avoid immediate blur
+        // Defer focus to avoid immediate blur
         setTimeout(() => {
             input.focus();
             input.select();
