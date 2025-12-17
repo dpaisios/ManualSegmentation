@@ -198,7 +198,8 @@ function redrawTimeBar(state) {
         state.deleteTarget,
         timeCanvas.width,
         timeCanvas.height,
-        state.split
+        state.split,
+        state.mergePreview
     );
 
     clearOverlay("timebar-");

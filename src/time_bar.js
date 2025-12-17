@@ -145,7 +145,8 @@ export function drawTimeBar(
     hoveredHandle,
     deleteTarget,
     W, H,
-    splitState
+    splitState,
+    mergePreview = null
 ) {
     if (!T || T.length === 0) {
         ctx.clearRect(0, 0, W, H);
@@ -185,9 +186,6 @@ export function drawTimeBar(
         ctx.fillRect(x0, barY0, x1 - x0, barY1 - barY0);
     }
 
-    drawMissingTimeHatch(ctx, T, W, H);
-    applyXYDimMask(ctx, T, W, H);
-
     // ---------------------------------------------------------
     // 2) Ticks
     // ---------------------------------------------------------
@@ -212,7 +210,7 @@ export function drawTimeBar(
     }
 
     // ---------------------------------------------------------
-    // 3) Selections (real + temp)
+    // 3) Selections (unchanged)
     // ---------------------------------------------------------
     const { side, triOffset } = getHandleSizes(H);
     const triY = barY0 - triOffset;
@@ -278,7 +276,28 @@ export function drawTimeBar(
     }
 
     for (const sel of selections) drawOneSelection(sel);
-    if (tempSel) drawOneSelection(tempSel);
+    if (tempSel && !tempSel.__mergePreview) drawOneSelection(tempSel);
+
+    // ---------------------------------------------------------
+    // 3.5) MERGE PREVIEW BAND (TOP LAYER)
+    // ---------------------------------------------------------
+    if (mergePreview && mergePreview.t1 > mergePreview.t0) {
+
+        const rel0 = (mergePreview.t0 - tMin) / (tMax - tMin);
+        const rel1 = (mergePreview.t1 - tMin) / (tMax - tMin);
+
+        const x0 = leftPad + rel0 * barWidth;
+        const x1 = leftPad + rel1 * barWidth;
+
+        const barH  = barY1 - barY0;
+        const bandH = barH * 1/3;
+        const bandY = barY0 + (barH - bandH) / 2;
+
+        ctx.save();
+        ctx.fillStyle = "rgba(43,176,166,.8)"; // now truly opaque
+        ctx.fillRect(x0, bandY, x1 - x0, bandH);
+        ctx.restore();
+    }
 
     // ---------------------------------------------------------
     // 4) Split preview line

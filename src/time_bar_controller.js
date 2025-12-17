@@ -67,6 +67,13 @@ export function attachTimeBarController({
     let splitMode    = false;
     let splitTarget  = null;    // sel | null
     let splitTime    = null;    // number | null (hover)
+
+    // Merging
+    let draggingMerge = false;
+    let mergeSource   = null;
+    let mergeT0       = null;
+    let mergeT1       = null;
+
     // ---------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------
@@ -119,6 +126,34 @@ export function attachTimeBarController({
             redrawXY();
         }
     });
+
+    //
+    function computeMergeFillGaps(selections, t0, t1) {
+        const a = Math.min(t0, t1);
+        const b = Math.max(t0, t1);
+
+        let gaps = [{ t0: a, t1: b }];
+
+        for (const sel of selections) {
+            const next = [];
+            for (const g of gaps) {
+                if (sel.t1 <= g.t0 || sel.t0 >= g.t1) {
+                    next.push(g);
+                } else {
+                    if (sel.t0 > g.t0) {
+                        next.push({ t0: g.t0, t1: sel.t0 });
+                    }
+                    if (sel.t1 < g.t1) {
+                        next.push({ t0: sel.t1, t1: g.t1 });
+                    }
+                }
+            }
+            gaps = next;
+            if (gaps.length === 0) break;
+        }
+
+        return gaps;
+    }
 
     // ---------------------------------------------------------
     // MOUSEDOWN
@@ -278,6 +313,38 @@ export function attachTimeBarController({
         }
 
         // -------------------------------------------------
+        // 3.5) Merge drag: click inside selection body
+        // -------------------------------------------------
+        for (const sel of selections) {
+            const tClick = pixelToTime(
+                clamp(x, leftPad, leftPad + barWidth),
+                leftPad, barWidth, tMin, tMax
+            );
+
+            if (tClick > sel.t0 && tClick < sel.t1) {
+
+                // Avoid conflict with handles
+                const x0 = leftPad + (sel.t0 - tMin) / (tMax - tMin) * barWidth;
+                const x1 = leftPad + (sel.t1 - tMin) / (tMax - tMin) * barWidth;
+
+                if (
+                    TB.hitTestHandleRect(x, y, x0, "left",  barY0, barY1, canvas.height) ||
+                    TB.hitTestHandleRect(x, y, x1, "right", barY0, barY1, canvas.height)
+                ) {
+                    break;
+                }
+
+                draggingMerge = true;
+                mergeSource   = sel;
+                mergeT0       = tClick;
+                mergeT1       = tClick;
+
+                canvas.style.cursor = "ew-resize";
+                return;
+            }
+        }
+
+        // -------------------------------------------------
         // 4) New selection creation
         // -------------------------------------------------
         if (
@@ -351,6 +418,29 @@ export function attachTimeBarController({
                 splitTime = null;
                 canvas.style.cursor = "default";
             }
+
+            redrawTimeBar();
+            redrawXY();
+            return;
+        }
+
+        // -------------------------------------------------
+        // Merge drag update
+        // -------------------------------------------------
+        if (draggingMerge) {
+            const t = pixelToTime(x, leftPad, barWidth, tMin, tMax);
+            mergeT1 = t;
+
+            const gaps = computeMergeFillGaps(
+                selections,
+                mergeT0,
+                mergeT1
+            );
+
+            tempSelection = {
+                __mergePreview: true,
+                gaps
+            };
 
             redrawTimeBar();
             redrawXY();
@@ -527,11 +617,44 @@ export function attachTimeBarController({
 
         const selections = getSelections() || [];
 
-        if (splitMode) {
-            // no-op; split commits on mousedown click inside bar
+        // -------------------------------------------------
+        // 1) Merge drag commit
+        // -------------------------------------------------
+        if (draggingMerge) {
+
+            const next = Select.mergeSelectionsByEnvelope(
+                selections,
+                mergeT0,
+                mergeT1,
+                mergeSource
+            );
+
+            if (next !== selections) {
+                setSelections(next);
+            }
+
+            draggingMerge = false;
+            mergeSource   = null;
+            mergeT0       = null;
+            mergeT1       = null;
+            tempSelection = null;
+
+            canvas.style.cursor = "default";
+            redrawTimeBar();
+            redrawXY();
             return;
         }
 
+        // -------------------------------------------------
+        // 2) Split mode (no-op: split commits on mousedown)
+        // -------------------------------------------------
+        if (splitMode) {
+            return;
+        }
+
+        // -------------------------------------------------
+        // 3) New selection creation commit
+        // -------------------------------------------------
         if (dragging && tempSelection && tempSelection.t1 > tempSelection.t0) {
             const next = Select.addOrMergeSelectionRange(
                 selections,
@@ -541,6 +664,9 @@ export function attachTimeBarController({
             setSelections(next);
         }
 
+        // -------------------------------------------------
+        // 4) Cleanup
+        // -------------------------------------------------
         clearDragState();
         clearHoverState();
 
@@ -586,6 +712,17 @@ export function attachTimeBarController({
             get hoveredHandle() { return hoveredHandle; },
             get deleteTarget()  { return deleteTarget; },
             get tempSelection() { return tempSelection; },
+
+            get mergePreview() {
+                if (!draggingMerge || mergeT0 == null || mergeT1 == null) {
+                    return null;
+                }
+                return {
+                    t0: Math.min(mergeT0, mergeT1),
+                    t1: Math.max(mergeT0, mergeT1)
+                };
+            },
+
             get split() {
                 return {
                     active: splitMode,
@@ -593,6 +730,7 @@ export function attachTimeBarController({
                     t: splitTime
                 };
             },
+
             get editingSel() {
                 const selections = getSelections() || [];
                 for (const sel of selections) {

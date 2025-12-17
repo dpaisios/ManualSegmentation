@@ -210,3 +210,58 @@ export function splitSelection(selections, targetSel, tSplit, T) {
     ID.recomputeAutoIDs(next);
     return next;
 }
+
+export function mergeSelectionsByEnvelope(
+    selections,
+    t0,
+    t1,
+    mergeSource = null
+) {
+    const a = Math.min(t0, t1);
+    const b = Math.max(t0, t1);
+    if (!(b > a)) return selections;
+
+    const overlapping = selections.filter(
+        s => s.t1 > a && s.t0 < b
+    );
+
+    if (overlapping.length < 2) {
+        return selections;
+    }
+
+    let merged0 = Infinity;
+    let merged1 = -Infinity;
+
+    for (const s of overlapping) {
+        merged0 = Math.min(merged0, s.t0);
+        merged1 = Math.max(merged1, s.t1);
+    }
+
+    // --- canonical selection ---
+    const primary =
+        mergeSource && overlapping.includes(mergeSource)
+            ? mergeSource
+            : overlapping[0];
+
+    primary.t0 = merged0;
+    primary.t1 = merged1;
+
+    const next = selections.filter(
+        s => s === primary || !overlapping.includes(s)
+    );
+
+    // -------------------------------------------------
+    // ID propagation rule
+    // -------------------------------------------------
+    if (primary.lockedID) {
+        for (const s of next) {
+            if (s === primary) continue;
+            s.id       = primary.id;
+            s.lockedID = true;
+        }
+    } else {
+        ID.recomputeAutoIDs(next);
+    }
+
+    return next;
+}

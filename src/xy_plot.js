@@ -103,7 +103,8 @@ export function drawXYHighlight(
     ctx, X, Y, Tip, TipSeg,
     T, t0, t1, alpha,
     transform, canvasWidth, canvasHeight,
-    showUp
+    showUp,
+    colorOverride = null
 ) {
     let start = 0;
     while (start < T.length && T[start] < t0) start++;
@@ -122,7 +123,10 @@ export function drawXYHighlight(
 
         ctx.beginPath();
 
-        if (Tip[i] === 0) {
+        if (colorOverride) {
+            ctx.strokeStyle = colorOverride;
+            ctx.setLineDash([]);
+        } else if (Tip[i] === 0) {
             ctx.strokeStyle = `rgba(255,50,50,${alpha})`;
             ctx.setLineDash([10,10]);
         } else {
@@ -234,9 +238,6 @@ function drawPerpSplitMarker(
 // -------------------------------------------------------------
 // Full XY redraw with selections
 // -------------------------------------------------------------
-// -------------------------------------------------------------
-// Full XY redraw with selections
-// -------------------------------------------------------------
 export function drawXYFromSelections(
     ctx, X, Y, Tip, TipSeg,
     T,
@@ -247,9 +248,7 @@ export function drawXYFromSelections(
     canvasWidth,
     canvasHeight,
     showUp,
-    // optional: split state { active, sel, t }
     splitState,
-    // optional: hovered selection from time bar (uses t0/t1)
     hoveredSel = null
 ) {
     // ---------------------------------------------------------
@@ -258,6 +257,10 @@ export function drawXYFromSelections(
     const splitting =
         !!splitState?.active &&
         !!splitState?.sel;
+
+    const mergePreviewActive =
+        !!tempSel?.__mergePreview &&
+        Array.isArray(tempSel.gaps);
 
     const hoverDimmingActive =
         !!hoveredSel &&
@@ -285,17 +288,16 @@ export function drawXYFromSelections(
     for (const sel of selections) {
         let alpha;
 
-        if (tempSel) {
-            // temp selection creation dims everything uniformly
+        if (mergePreviewActive) {
+            // merge preview does NOT dim existing selections
+            alpha = 0.75;
+        } else if (tempSel) {
             alpha = 0.4;
         } else if (splitting) {
-            // split mode: active selection emphasized
             alpha = (sel === splitState.sel) ? 0.9 : 0.25;
         } else if (hoverDimmingActive) {
-            // hover time selection: hovered emphasized
             alpha = (sel === hoveredSel) ? 0.9 : 0.15;
         } else {
-            // normal state
             alpha = 0.75;
         }
 
@@ -308,9 +310,9 @@ export function drawXYFromSelections(
     }
 
     // ---------------------------------------------------------
-    // 3) Temp selection highlight (during creation)
+    // 3) Temp selection highlight (creation only)
     // ---------------------------------------------------------
-    if (tempSel) {
+    if (tempSel && !mergePreviewActive) {
         drawXYHighlight(
             ctx, X, Y, Tip, TipSeg,
             T, tempSel.t0, tempSel.t1, 0.9,
@@ -320,7 +322,7 @@ export function drawXYFromSelections(
     }
 
     // ---------------------------------------------------------
-    // 4) Split marker (unchanged)
+    // 4) Split marker
     // ---------------------------------------------------------
     if (splitting && splitState.t != null) {
         drawPerpSplitMarker(
@@ -328,6 +330,27 @@ export function drawXYFromSelections(
             splitState.t,
             transform, canvasWidth, canvasHeight
         );
+    }
+
+    // ---------------------------------------------------------
+    // 5) Merge preview gaps (teal overlay ONLY)
+    // ---------------------------------------------------------
+    if (mergePreviewActive) {
+        for (const g of tempSel.gaps) {
+            drawXYHighlight(
+                ctx,
+                X, Y, Tip, TipSeg,
+                T,
+                g.t0,
+                g.t1,
+                1,
+                transform,
+                canvasWidth,
+                canvasHeight,
+                showUp,
+                "rgba(43,176,166,0.95)"
+            );
+        }
     }
 }
 
