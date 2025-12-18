@@ -38,6 +38,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
     stat: (filePath) => ipcRenderer.invoke("fs-stat", filePath),
 
     // ---------------------------------------------------------
+    // Delete export in folder
+    // ---------------------------------------------------------
+    deleteFile: (filePath) => {
+        try {
+            fs.unlinkSync(filePath);
+            return true;
+        } catch (err) {
+            console.error("deleteFile failed:", err);
+            return false;
+        }
+    },
+    // ---------------------------------------------------------
     // Dialogs
     // ---------------------------------------------------------
     openFileDialog: () => ipcRenderer.invoke("open-file-dialog"),

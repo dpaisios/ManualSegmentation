@@ -181,9 +181,10 @@ export function attachTitleBar({
             const fileName = fullPath.split(/[/\\]/).pop();
 
             const tracked = AppState.exportTracker?.[fullPath] ?? null;
-            const count = (tracked && Number.isFinite(tracked.exportCount))
-                ? tracked.exportCount
-                : null;
+            const count =
+                (tracked && Number.isFinite(tracked.exportCount))
+                    ? tracked.exportCount
+                    : null;
 
             // exported styling
             if (count != null) {
@@ -200,6 +201,46 @@ export function attachTitleBar({
             nameEl.textContent = fileName;
 
             item.append(countEl, nameEl);
+
+            // -------------------------------------------------
+            // Delete exported selection button (right edge)
+            // -------------------------------------------------
+            if (tracked && tracked.exportPath) {
+                const deleteBtn = document.createElement("button");
+                deleteBtn.className = "fileDropdownDelete";
+                deleteBtn.title = "Delete exported segmentation";
+
+                deleteBtn.innerHTML = `
+                    <span class="trashIconImg"></span>
+                `;
+
+                deleteBtn.onclick = e => {
+                    e.stopPropagation();
+
+                    const ok = window.confirm(
+                        `Delete exported segmentation for:\n${fileName}?`
+                    );
+                    if (!ok) return;
+
+                    const success =
+                        window.electronAPI.deleteFile(tracked.exportPath);
+
+                    if (!success) {
+                        alert("Failed to delete export file.");
+                        return;
+                    }
+
+                    // Update AppState
+                    delete AppState.exportTracker[fullPath];
+                    delete AppState.lastExportedVersionByFile[fullPath];
+
+                    // Rebuild dropdown to reflect state
+                    closeDropdown();
+                    toggleFileDropdown();
+                };
+
+                item.appendChild(deleteBtn);
+            }
 
             if (idx === AppState.fileIndex) {
                 item.classList.add("active");
@@ -229,14 +270,16 @@ export function attachTitleBar({
         document.body.appendChild(fileDropdown);
         arrow.classList.add("open");
 
-        // IMPORTANT: only "ignore" the dropdown zone when the click is INSIDE the title bar
+        // ---------------------------------------------------------
+        // Outside click handling (capture phase)
+        // ---------------------------------------------------------
         onDocMouseDown = e => {
             if (!fileDropdown) return;
 
             const clickInTitleBar = titleBarEl.contains(e.target);
 
             if (clickInTitleBar && isInDropdownZone(e.clientX)) {
-                // let the title bar handler toggle; do not auto-close here
+                // let title bar toggle logic handle it
                 return;
             }
 
@@ -245,7 +288,6 @@ export function attachTitleBar({
             }
         };
 
-        // attach in capture so we win over other handlers
         setTimeout(() => {
             document.addEventListener("mousedown", onDocMouseDown, true);
         }, 0);
