@@ -1,24 +1,25 @@
 // -------------------------------------------------------------
-// time_bar.js — time bar with XY-based temporal dimming
-// time bar rendering (background, handles, split preview)
+// time_bar.js — time bar rendering (background, ticks, overlays,
+// selections/handles, split preview, merge preview)
 // -------------------------------------------------------------
 
-import { isEditingSelection } from "./label_editor.js";
 import {
     timeBarGeom,
     getIndexRange,
     getHandleSizes
 } from "./time_bar_geom.js";
+
 import {
     drawTriangle,
     drawTimeSubSegment,
     LABEL_FONT
 } from "./time_bar_primitives.js";
+
 import { computeTimeTicks } from "./time_scale.js";
 import { drawMissingTimeHatch } from "./visibility.js";
 
 // -------------------------------------------------------------
-// Hit testing (handles only; cluster is now in primitives)
+// Hit testing (handles only; cluster UI is overlay-owned)
 // -------------------------------------------------------------
 export function hitTestHandleRect(
     xClick, yClick,
@@ -55,6 +56,9 @@ export function hitTestHandleRect(
 
 // -------------------------------------------------------------
 // INTERNAL: highlight XY-selected temporal ranges (green overlay)
+//
+// Note: this reads from window.xyTempTimeRanges (set by app.js).
+// Long-term cleanup: pass xy ranges explicitly into drawTimeBar.
 // -------------------------------------------------------------
 function applyXYDimMask(ctx, T, W, H) {
     if (typeof window === "undefined") return;
@@ -76,6 +80,7 @@ function applyXYDimMask(ctx, T, W, H) {
 
     if (segs.length === 0) return;
 
+    // Merge overlapping highlight segments
     const merged = [];
     let cur = { ...segs[0] };
     for (let i = 1; i < segs.length; i++) {
@@ -137,16 +142,13 @@ function drawSplitPreviewLine(ctx, x, barY0, barY1) {
 // -------------------------------------------------------------
 // Full redraw
 // -------------------------------------------------------------
-// -------------------------------------------------------------
-// Full redraw
-// -------------------------------------------------------------
 export function drawTimeBar(
     ctx,
     T, Tip,
     selections,
     tempSel,
     hoveredHandle,
-    deleteTarget,
+    _deleteTarget,  // unused; cluster visuals are overlay-owned (kept for signature compatibility)
     W, H,
     splitState,
     mergePreview = null
@@ -162,6 +164,11 @@ export function drawTimeBar(
 
     ctx.clearRect(0, 0, W, H);
 
+    // Small helper: time → x mapping
+    function timeToX(t) {
+        return leftPad + (t - tMin) / (tMax - tMin) * barWidth;
+    }
+
     // ---------------------------------------------------------
     // 1) Base Tip-coloured background
     // ---------------------------------------------------------
@@ -170,8 +177,8 @@ export function drawTimeBar(
 
     for (let i = 1; i < T.length; i++) {
         if (Tip[i] !== lastTip) {
-            const x0 = leftPad + (T[segStart] - tMin) / (tMax - tMin) * barWidth;
-            const x1 = leftPad + (T[i]        - tMin) / (tMax - tMin) * barWidth;
+            const x0 = timeToX(T[segStart]);
+            const x1 = timeToX(T[i]);
 
             ctx.fillStyle = (lastTip === 0) ? "#bbb" : "#acacacff";
             ctx.fillRect(x0, barY0, x1 - x0, barY1 - barY0);
@@ -182,8 +189,8 @@ export function drawTimeBar(
     }
 
     {
-        const x0 = leftPad + (T[segStart]     - tMin) / (tMax - tMin) * barWidth;
-        const x1 = leftPad + (T[T.length - 1] - tMin) / (tMax - tMin) * barWidth;
+        const x0 = timeToX(T[segStart]);
+        const x1 = timeToX(T[T.length - 1]);
 
         ctx.fillStyle = (lastTip === 0) ? "#bbb" : "#acacacff";
         ctx.fillRect(x0, barY0, x1 - x0, barY1 - barY0);
@@ -201,7 +208,7 @@ export function drawTimeBar(
     const ticks = computeTimeTicks(tMin, tMax, barWidth);
 
     for (const { t, label } of ticks) {
-        const x  = leftPad + (t - tMin) / (tMax - tMin) * barWidth;
+        const x  = timeToX(t);
         const xp = Math.round(x) + 0.5;
 
         ctx.beginPath();
@@ -213,20 +220,30 @@ export function drawTimeBar(
     }
 
     // ---------------------------------------------------------
-    // 2.5) XY-selected temporal ranges (RESTORED)
+    // 2.4) Missing-time hatch (large Δt gaps)
+    // ---------------------------------------------------------
+    drawMissingTimeHatch(ctx, T, W, H);
+
+    // ---------------------------------------------------------
+    // 2.5) XY-selected temporal ranges (interaction overlay)
     // ---------------------------------------------------------
     applyXYDimMask(ctx, T, W, H);
 
     // ---------------------------------------------------------
-    // 3) Selections
+    // 3) Selections (real + temp)
+    //
+    // Note: tempSel may be a merge preview object:
+    //   { __mergePreview: true, gaps: [...] }
+    // In that case, we do not draw it here (handled by mergePreview band).
     // ---------------------------------------------------------
     const { side, triOffset } = getHandleSizes(H);
     const triY = barY0 - triOffset;
 
     function drawOneSelection(sel) {
-        const x0 = leftPad + (sel.t0 - tMin) / (tMax - tMin) * barWidth;
-        const x1 = leftPad + (sel.t1 - tMin) / (tMax - tMin) * barWidth;
+        const x0 = timeToX(sel.t0);
+        const x1 = timeToX(sel.t1);
 
+        // Subsegments coloured by Tip
         const [startIdx, endIdx] = getIndexRange(T, sel.t0, sel.t1);
         let lastTip  = Tip[startIdx];
         let segStart = startIdx;
@@ -251,6 +268,7 @@ export function drawTimeBar(
             tMin, tMax
         );
 
+        // Handles with hover colour
         const baseColor  = "rgba(24,18,18,1)";
         const hoverColor = "rgba(119,115,107,1)";
 
@@ -264,6 +282,7 @@ export function drawTimeBar(
             hoveredHandle.sel === sel &&
             hoveredHandle.side === "right";
 
+        // Left handle
         ctx.fillStyle   = leftHovered ? hoverColor : baseColor;
         ctx.strokeStyle = ctx.fillStyle;
         ctx.lineWidth   = 2;
@@ -273,6 +292,7 @@ export function drawTimeBar(
         ctx.lineTo(x0, barY1);
         ctx.stroke();
 
+        // Right handle
         ctx.fillStyle   = rightHovered ? hoverColor : baseColor;
         ctx.strokeStyle = ctx.fillStyle;
         ctx.lineWidth   = 2;
@@ -287,15 +307,11 @@ export function drawTimeBar(
     if (tempSel && !tempSel.__mergePreview) drawOneSelection(tempSel);
 
     // ---------------------------------------------------------
-    // 3.5) MERGE PREVIEW BAND (TOP LAYER)
+    // 3.5) MERGE PREVIEW BAND (top layer)
     // ---------------------------------------------------------
     if (mergePreview && mergePreview.t1 > mergePreview.t0) {
-
-        const rel0 = (mergePreview.t0 - tMin) / (tMax - tMin);
-        const rel1 = (mergePreview.t1 - tMin) / (tMax - tMin);
-
-        const x0 = leftPad + rel0 * barWidth;
-        const x1 = leftPad + rel1 * barWidth;
+        const x0 = timeToX(mergePreview.t0);
+        const x1 = timeToX(mergePreview.t1);
 
         const barH  = barY1 - barY0;
         const bandH = barH * 1 / 3;
@@ -311,8 +327,7 @@ export function drawTimeBar(
     // 4) Split preview line
     // ---------------------------------------------------------
     if (splitState?.active && splitState?.t != null) {
-        const x = leftPad + (splitState.t - tMin) / (tMax - tMin) * barWidth;
-        const xp = Math.round(x) + 0.5;
+        const xp = Math.round(timeToX(splitState.t)) + 0.5;
 
         ctx.save();
         ctx.beginPath();

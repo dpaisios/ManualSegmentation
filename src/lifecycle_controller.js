@@ -271,11 +271,20 @@ export function attachLifecycleController({
         // EXPLICIT RESET FOR NEW FOLDER SESSION
         // -----------------------------------------------------
         if (params.reset) {
-            console.log("[LIFECYCLE] RESETTING SESSION STATE");
+            console.log("[LIFECYCLE] FULL SESSION RESET");
+
             AppState.fileList  = null;
             AppState.fileIndex = -1;
+
             AppState.exportTracker = {};
             AppState.lastExportedVersionByFile = {};
+
+            // Prevent unsaved-selection guard
+            AppState.selections = [];
+            AppState.selectionsVersion = 0;
+            AppState.dataLoaded = false;
+
+            resetLoaderState();
         }
 
         // -----------------------------------------------------
