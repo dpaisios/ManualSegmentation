@@ -90,27 +90,6 @@ ipcMain.handle("save-file-dialog", async (_, options = {}) => {
 });
 
 // -------------------------------------------------------------
-// IPC: EXPORT MODE SELECTION (NEW, REQUIRED)
-// -------------------------------------------------------------
-ipcMain.handle("choose-export-mode", async () => {
-    const result = await dialog.showMessageBox({
-        type: "question",
-        buttons: [
-            "Segmented folder",
-            "Fixed folder",
-            "Cancel"
-        ],
-        defaultId: 0,
-        cancelId: 2,
-        title: "Export destination",
-        message: "Choose where segmented files should be exported:"
-    });
-
-    // 0 = segmented, 1 = fixed, 2 = cancel
-    return result.response;
-});
-
-// -------------------------------------------------------------
 // IPC: folder format selection dialog
 // -------------------------------------------------------------
 ipcMain.handle("select-folder-formats", async (_, formats) => {

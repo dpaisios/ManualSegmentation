@@ -28,11 +28,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
             f.toLowerCase().endsWith(".json")
         ),
 
-    // Non-recursive listing (ALL entries)
     listFiles: (folder) =>
         fs.readdirSync(folder),
 
-    // Explicit extension-filtered listing
     listFilesWithExtensions: (folder, extensions) =>
         fs.readdirSync(folder).filter(f => {
             const ext = path.extname(f).slice(1).toLowerCase();
@@ -62,7 +60,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     },
 
     // ---------------------------------------------------------
-    // Stats via main (safe)
+    // Stats via main
     // ---------------------------------------------------------
 
     stat: (filePath) =>
@@ -80,10 +78,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
     saveFileDialog: (options) =>
         ipcRenderer.invoke("save-file-dialog", options),
-
-    // NEW: export mode chooser (required)
-    chooseExportMode: () =>
-        ipcRenderer.invoke("choose-export-mode"),
 
     selectFolderFormats: (formats) =>
         ipcRenderer.invoke("select-folder-formats", formats),

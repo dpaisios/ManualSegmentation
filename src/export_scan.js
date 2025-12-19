@@ -11,20 +11,6 @@ function fileNameFromPath(p) {
     return String(p).split(/[/\\]/).pop();
 }
 
-function getExportDirForDataFolder(AppState, dataFolderAbs) {
-    const cfg = AppState.exportConfig ?? { mode: "manual" };
-
-    if (cfg.mode === "fixed") {
-        return cfg.fixedPath || null;
-    }
-
-    if (cfg.mode === "relative") {
-        return window.electronAPI.join(dataFolderAbs, "Segmented");
-    }
-
-    return null;
-}
-
 function countUniqueManSegID(parsed) {
     if (!Array.isArray(parsed)) return 0;
 
@@ -51,8 +37,9 @@ export async function scanExportsForFolderSession({
     dataFilesAbs,
     dataFolderAbs
 }) {
-    const exportDir = getExportDirForDataFolder(AppState, dataFolderAbs);
-    if (!exportDir) return;
+
+    const exportDir =
+        window.electronAPI.join(dataFolderAbs, "Segmented");
 
     if (!window.electronAPI.exists(exportDir)) return;
     if (!window.electronAPI.isDirectory(exportDir)) return;

@@ -40,6 +40,7 @@ export function attachLifecycleController({
         AppState.fileIndex = -1;
         AppState.exportTracker = {};
         AppState.lastExportedVersionByFile = {};
+        AppState.originalFilePath = null;
         resetSelectionState();
     }
 
@@ -109,7 +110,7 @@ export function attachLifecycleController({
 
         const unexported =
             hasSelections &&
-            (!curTracked || curTracked.exportCount !== AppState.selections.length);
+            AppState.lastExportedVersionByFile[curPath] !== AppState.selectionsVersion;
 
         if (unexported) {
             const ok = window.confirm(
