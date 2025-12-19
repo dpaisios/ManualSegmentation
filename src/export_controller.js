@@ -1,8 +1,6 @@
 // -------------------------------------------------------------
 // export_controller.js
-// Handles export logic only (reads from AppState)
 // -------------------------------------------------------------
-
 export function createExportController({
     AppState,
     extractRowsForExport,
@@ -11,9 +9,6 @@ export function createExportController({
 
     async function exportData() {
 
-        // -------------------------------------------------
-        // Guards
-        // -------------------------------------------------
         if (!AppState.detectedCols) {
             alert("No detected column mapping.");
             return false;
@@ -34,9 +29,6 @@ export function createExportController({
             return false;
         }
 
-        // -------------------------------------------------
-        // Build export content
-        // -------------------------------------------------
         const rows = extractRowsForExport(
             AppState.originalRaw,
             AppState.selections,
@@ -58,10 +50,33 @@ export function createExportController({
         const outName = `${base}_segmented.json`;
 
         // -------------------------------------------------
-        // FILE MODE → Save As dialog
+        // FILE MODE → fixed export path OR Save As dialog
         // -------------------------------------------------
         if (!Array.isArray(AppState.fileList)) {
 
+            // MATLAB/system export: fixed path, no dialogs
+            if (typeof AppState.exportPath === "string" && AppState.exportPath.length) {
+                try {
+                    const dir = window.electronAPI.dirname(AppState.exportPath);
+                    window.electronAPI.mkdir(dir, { recursive: true });
+
+                    window.electronAPI.writeFile(AppState.exportPath, txt);
+                    recordSuccessfulExport(AppState.exportPath);
+
+                    // Auto-close after *successful* export (main guards external launches)
+                    if (window.electronAPI.requestAppQuit) {
+                        window.electronAPI.requestAppQuit();
+                    }
+
+                    return true;
+                } catch (err) {
+                    console.error(err);
+                    alert("Failed to write export file.");
+                    return false;
+                }
+            }
+
+            // Interactive export: Save As dialog
             const res = await window.electronAPI.saveFileDialog({
                 defaultPath: outName,
                 filters: [{ name: "JSON", extensions: ["json"] }]
@@ -108,9 +123,6 @@ export function createExportController({
         }
     }
 
-    // -------------------------------------------------
-    // INTERNAL helper
-    // -------------------------------------------------
     function recordSuccessfulExport(exportPath) {
         const path = AppState.originalFilePath;
         if (!path) return;

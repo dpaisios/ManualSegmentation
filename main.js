@@ -1,3 +1,6 @@
+// -------------------------------------------------------------
+// main.js
+// -------------------------------------------------------------
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
 const { app, BrowserWindow, ipcMain, dialog } = require("electron");
@@ -22,7 +25,7 @@ if (!fs.existsSync(tempDataDir)) {
 }
 
 // -------------------------------------------------------------
-// OPTIONAL PARAMETERS FROM MATLAB
+// OPTIONAL PARAMETERS FROM MATLAB / system call
 // -------------------------------------------------------------
 let launchParams = {
     col_names: null,
@@ -39,9 +42,19 @@ for (const arg of process.argv.slice(1)) {
     }
 
     if (arg.startsWith("--export_path=")) {
-        launchParams.export_path = arg.replace("--export_path=", "");
+        // strip surrounding quotes defensively
+        launchParams.export_path = arg
+            .replace("--export_path=", "")
+            .replace(/^"(.*)"$/, "$1");
     }
 }
+
+// -------------------------------------------------------------
+// External (MATLAB/system) launch detection
+// -------------------------------------------------------------
+const IS_EXTERNAL_LAUNCH =
+    typeof launchParams.export_path === "string" &&
+    launchParams.export_path.length > 0;
 
 // -------------------------------------------------------------
 // Clear contents of tempdata on exit
@@ -128,6 +141,15 @@ ipcMain.on("startup-data-file", (event, payload) => {
 });
 
 // -------------------------------------------------------------
+// IPC: Quit request (auto-close after successful export)
+// -------------------------------------------------------------
+ipcMain.on("request-app-quit", () => {
+    if (!IS_EXTERNAL_LAUNCH) return;
+    // Triggers before-quit -> cleanTempData()
+    app.quit();
+});
+
+// -------------------------------------------------------------
 // Create window
 // -------------------------------------------------------------
 app.commandLine.appendSwitch("disable-gpu-sandbox");
@@ -153,6 +175,7 @@ function createWindow() {
     win.once("ready-to-show", () => win.show());
     win.loadFile("index.html");
 
+    // Always start from tempdata; export_path is metadata only.
     win.webContents.on("did-finish-load", () => {
         win.webContents.send("startup-data-file", {
             folder: tempDataDir,

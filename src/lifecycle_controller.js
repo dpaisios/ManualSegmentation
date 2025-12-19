@@ -41,6 +41,7 @@ export function attachLifecycleController({
         AppState.exportTracker = {};
         AppState.lastExportedVersionByFile = {};
         AppState.originalFilePath = null;
+        AppState.exportPath = null;
         resetSelectionState();
     }
 
@@ -187,6 +188,8 @@ export function attachLifecycleController({
             settingsOptions
         );
 
+        AppState.exportPath = params?.export_path ?? null;
+
         AppState.originalFileName = newest.split(/[/\\]/).pop();
         AppState.originalFilePath = newest;
         AppState.dataLoaded = true;
@@ -277,6 +280,8 @@ export function attachLifecycleController({
             params?.export_path ?? null,
             settingsOptions
         );
+
+        AppState.exportPath = params?.export_path ?? null;
 
         AppState.originalFileName = path.split(/[/\\]/).pop();
         AppState.originalFilePath = path;
