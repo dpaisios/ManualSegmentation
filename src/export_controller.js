@@ -8,8 +8,12 @@ export function createExportController({
     extractRowsForExport,
     buildExportJSON
 }) {
+
     async function exportData() {
 
+        // -------------------------------------------------
+        // Guards
+        // -------------------------------------------------
         if (!AppState.detectedCols) {
             alert("No detected column mapping.");
             return false;
@@ -30,6 +34,9 @@ export function createExportController({
             return false;
         }
 
+        // -------------------------------------------------
+        // Build export content
+        // -------------------------------------------------
         const rows = extractRowsForExport(
             AppState.originalRaw,
             AppState.selections,
@@ -43,8 +50,6 @@ export function createExportController({
 
         const txt = buildExportJSON(rows);
 
-        const cfg = AppState.exportConfig ?? { mode: "manual" };
-
         const base =
             AppState.originalFileName
                 ? AppState.originalFileName.replace(/\.[^.]+$/, "")
@@ -53,49 +58,38 @@ export function createExportController({
         const outName = `${base}_segmented.json`;
 
         // -------------------------------------------------
-        // MANUAL MODE
+        // FILE MODE → Save As dialog
         // -------------------------------------------------
-        if (cfg.mode === "manual") {
-            const blob = new Blob([txt], { type: "application/json" });
-            const url  = URL.createObjectURL(blob);
+        if (!Array.isArray(AppState.fileList)) {
 
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = outName;
-            a.click();
+            const res = await window.electronAPI.saveFileDialog({
+                defaultPath: outName,
+                filters: [{ name: "JSON", extensions: ["json"] }]
+            });
 
-            URL.revokeObjectURL(url);
+            if (res.canceled || !res.filePath) {
+                return false;
+            }
 
-            // Manual mode has no stable path → do not set exportPath
-            recordSuccessfulExport(null);
-            return true;
-        }
-
-        // -------------------------------------------------
-        // AUTOMATIC MODES
-        // -------------------------------------------------
-        let exportDir = null;
-
-        if (cfg.mode === "fixed") {
-            exportDir = cfg.fixedPath;
-            if (!exportDir) {
-                alert("No fixed export folder selected.");
+            try {
+                window.electronAPI.writeFile(res.filePath, txt);
+                recordSuccessfulExport(res.filePath);
+                return true;
+            } catch (err) {
+                console.error(err);
+                alert("Failed to write export file.");
                 return false;
             }
         }
 
-        if (cfg.mode === "relative") {
-            if (!AppState.originalFilePath) {
-                alert("Missing source file path.");
-                return false;
-            }
+        // -------------------------------------------------
+        // FOLDER MODE → always ./Segmented
+        // -------------------------------------------------
+        const dataFolder =
+            window.electronAPI.dirname(AppState.originalFilePath);
 
-            const loadDir =
-                window.electronAPI.dirname(AppState.originalFilePath);
-
-            exportDir =
-                window.electronAPI.join(loadDir, "Segmented");
-        }
+        const exportDir =
+            window.electronAPI.join(dataFolder, "Segmented");
 
         try {
             window.electronAPI.mkdir(exportDir, { recursive: true });
@@ -124,7 +118,7 @@ export function createExportController({
         AppState.exportTracker[path] = {
             exportCount: AppState.selections.length,
             exportedAt: Date.now(),
-            exportPath // <-- CRITICAL for in-session import
+            exportPath
         };
 
         AppState.lastExportedVersionByFile[path] =

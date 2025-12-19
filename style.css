@@ -33,6 +33,76 @@ body {
     position: relative; /* REQUIRED for hit zone positioning */
 }
 
+/* TITLE BAR ICON BASE --------------------------------------- */
+
+.title-icon {
+    display: block;
+    width: 18px;
+    height: 18px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+/* EXPORT / SAVE BUTTON -------------------------------------- */
+
+.title-export-btn {
+    position: relative;
+    height: 28px;
+    width: 28px;
+}
+
+/* default */
+.title-export-btn[data-state="idle"] .title-export-icon {
+    background-image: url("./images/save.svg");
+}
+
+/* hover */
+.title-export-btn[data-state="hover"] .title-export-icon {
+    background-image: url("./images/save_hover.svg");
+}
+
+/* success */
+.title-export-btn[data-state="success"] .title-export-icon {
+    background-image: url("./images/save_success.svg");
+}
+
+/* FOLDER BUTTON --------------------------------------------- */
+
+.title-folder-btn {
+    position: relative;
+    height: 28px;
+    width: 28px;
+}
+
+/* idle */
+.title-folder-btn[data-state="folder-idle"] .title-folder-icon {
+    background-image: url("./images/folder.svg");
+}
+
+/* hover */
+.title-folder-btn[data-state="folder-hover"] .title-folder-icon {
+    background-image: url("./images/folder_hover.svg");
+}
+
+/* FILE BUTTON ----------------------------------------------- */
+
+.title-file-btn {
+    position: relative;
+    height: 28px;
+    width: 28px;
+}
+
+/* idle */
+.title-file-btn[data-state="idle"] .title-file-icon {
+    background-image: url("./images/file.svg");
+}
+
+/* hover */
+.title-file-btn[data-state="hover"] .title-file-icon {
+    background-image: url("./images/file_hover.svg");
+}
+
 /* DROPDOWN HIT ZONE ------------------------------------------ */
 
 .dropdownHitZone {
@@ -144,7 +214,7 @@ body {
 /* CANVASES --------------------------------------------------- */
 
 #xyCanvas {
-    flex: 70;
+    flex: 74;
     width: 100%;
     display: block;
     min-height: 0;
@@ -159,7 +229,7 @@ body {
 }
 
 #settingsCanvas {
-    flex: 10;
+    flex: 6;
     width: 100%;
     display: block;
     background: #eee;
@@ -179,53 +249,6 @@ canvas {
     pointer-events: none;
     overflow: visible;
     z-index: 10;
-}
-
-/* FILE OVERLAY ----------------------------------------------- */
-
-#fileOverlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(200, 200, 200, 0.85);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-    pointer-events: auto;
-}
-
-#fileOverlay.hidden {
-    display: none;
-}
-
-#loadMessage {
-    text-align: center;
-}
-
-#loadMessage p {
-    margin: 12px;
-    text-align: center;
-}
-
-#openFileBtn,
-#openFolderBtn {
-    padding: 12px 32px;
-    background: white;
-    color: black;
-    border-radius: 6px;
-    border: 1px solid #555;
-    cursor: pointer;
-    font-size: 16px;
-    margin-top: 10px;
-}
-
-#acceptedFormats {
-    margin-top: 18px;
-    font-size: 14px;
-    color: #222;
 }
 
 /* GENERIC MODAL ---------------------------------------------- */
@@ -312,14 +335,6 @@ canvas {
     outline-offset: -2px;
 }
 
-.fileDropdownCount {
-    width: 28px;              /* fixed “column” width */
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    color: rgba(0,0,0,0.55);
-    flex: 0 0 auto;
-}
-
 .fileDropdownItem.active::before {
     content: "";
     position: absolute;
@@ -328,7 +343,14 @@ canvas {
     bottom: 3px;
     width: 3px;
     border-radius: 2px;
-    background: #444; /* neutral dark */
+    background: #444;
+}
+
+.fileDropdownCount {
+    width: 28px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: rgba(0,0,0,0.55);
 }
 
 .fileDropdownName {
@@ -340,7 +362,7 @@ canvas {
 }
 
 .fileDropdownItem.exported {
-    background: rgba(34, 197, 94, 0.08); /* subtle green tint */
+    background: rgba(34, 197, 94, 0.08);
 }
 
 .fileDropdownItem.exported:hover {
@@ -348,13 +370,11 @@ canvas {
 }
 
 /* DELETE (TRASH) BUTTON -------------------------------------- */
+
 .fileDropdownDelete {
     flex: 0 0 auto;
     margin-left: 6px;
-
-    height: 1.5em;   /* matches text block visually */
-    width: auto;
-
+    height: 1.5em;
     border: none;
     background: transparent;
     cursor: pointer;
@@ -368,68 +388,12 @@ canvas {
 .fileDropdownDelete .trashIconImg {
     height: 100%;
     aspect-ratio: 1 / 1;
-
     background-image: url("./images/bin_closed.svg");
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-
-    pointer-events: none;
 }
 
 .fileDropdownDelete:hover .trashIconImg {
     background-image: url("./images/bin_open.svg");
-}
-
-/* EXPORT OPTIONS --------------------------------------------- */
-
-#exportOptions {
-    margin-top: 14px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(0,0,0,0.15);
-    width: 520px;
-    max-width: 92vw;
-}
-
-.exportTitle {
-    font-size: 14px;
-    font-weight: 600;
-    margin-bottom: 8px;
-    color: #222;
-}
-
-.exportRow {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 6px 0;
-    font-size: 14px;
-    color: #222;
-    user-select: none;
-}
-
-/* EXPORT PATH SELECTION -------------------------------------- */
-
-#chooseExportFolderBtn {
-    padding: 6px 10px;
-    border-radius: 6px;
-    border: 1px solid #555;
-    background: white;
-    cursor: pointer;
-    font-size: 13px;
-}
-
-#chooseExportFolderBtn:disabled {
-    opacity: 0.4;
-    cursor: default;
-}
-
-.exportPath {
-    font-size: 12px;
-    color: #444;
-    opacity: 0.9;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 260px;
 }

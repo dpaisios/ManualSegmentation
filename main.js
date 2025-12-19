@@ -23,9 +23,6 @@ if (!fs.existsSync(tempDataDir)) {
 
 // -------------------------------------------------------------
 // OPTIONAL PARAMETERS FROM MATLAB
-// Usage:
-//   --col_names=col1,col2,col3
-//   --export_path=C:/folder/file.json
 // -------------------------------------------------------------
 let launchParams = {
     col_names: null,
@@ -33,10 +30,9 @@ let launchParams = {
 };
 
 for (const arg of process.argv.slice(1)) {
-
     if (arg.startsWith("--col_names=")) {
-        const raw = arg.replace("--col_names=", "");
-        launchParams.col_names = raw
+        launchParams.col_names = arg
+            .replace("--col_names=", "")
             .split(",")
             .map(s => s.trim())
             .filter(Boolean);
@@ -54,35 +50,64 @@ function cleanTempData() {
     if (!fs.existsSync(tempDataDir)) return;
 
     for (const f of fs.readdirSync(tempDataDir)) {
-        const full = path.join(tempDataDir, f);
         try {
-            fs.rmSync(full, { recursive: true, force: true });
+            fs.rmSync(path.join(tempDataDir, f), {
+                recursive: true,
+                force: true
+            });
         } catch (err) {
-            console.error("Failed to delete", full, err);
+            console.error("Failed to delete", f, err);
         }
     }
 }
 
 // -------------------------------------------------------------
-// IPC: File dialog
+// IPC: Open FILE only
 // -------------------------------------------------------------
 ipcMain.handle("open-file-dialog", async () => {
     return await dialog.showOpenDialog({
-        properties: ["openFile"],
-        filters: [{
-            name: "Data Files",
-            extensions: ["json", "csv", "txt"]
-        }]
+        properties: ["openFile"]
     });
 });
 
 // -------------------------------------------------------------
-// IPC: Folder dialog
+// IPC: Open FOLDER only
 // -------------------------------------------------------------
 ipcMain.handle("open-folder-dialog", async () => {
     return await dialog.showOpenDialog({
         properties: ["openDirectory"]
     });
+});
+
+// -------------------------------------------------------------
+// IPC: SAVE FILE dialog
+// -------------------------------------------------------------
+ipcMain.handle("save-file-dialog", async (_, options = {}) => {
+    return await dialog.showSaveDialog({
+        title: "Save segmented file",
+        ...options
+    });
+});
+
+// -------------------------------------------------------------
+// IPC: EXPORT MODE SELECTION (NEW, REQUIRED)
+// -------------------------------------------------------------
+ipcMain.handle("choose-export-mode", async () => {
+    const result = await dialog.showMessageBox({
+        type: "question",
+        buttons: [
+            "Segmented folder",
+            "Fixed folder",
+            "Cancel"
+        ],
+        defaultId: 0,
+        cancelId: 2,
+        title: "Export destination",
+        message: "Choose where segmented files should be exported:"
+    });
+
+    // 0 = segmented, 1 = fixed, 2 = cancel
+    return result.response;
 });
 
 // -------------------------------------------------------------
@@ -105,25 +130,22 @@ ipcMain.handle("select-folder-formats", async (_, formats) => {
         detail: "Choose which files you want to load:"
     });
 
-    return result.response; // index of button
+    return result.response;
 });
 
 // -------------------------------------------------------------
 // IPC: fs.stat (safe)
 // -------------------------------------------------------------
-ipcMain.handle("fs-stat", (_, filePath) => {
-    return fs.statSync(filePath);
-});
+ipcMain.handle("fs-stat", (_, filePath) => fs.statSync(filePath));
 
 // -------------------------------------------------------------
 // IPC: LOOPBACK for renderer-triggered loads
-// renderer -> main -> renderer
 // -------------------------------------------------------------
 ipcMain.on("startup-data-file", (event, payload) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win) return;
-
-    win.webContents.send("startup-data-file", payload);
+    if (win) {
+        win.webContents.send("startup-data-file", payload);
+    }
 });
 
 // -------------------------------------------------------------
@@ -150,12 +172,8 @@ function createWindow() {
     });
 
     win.once("ready-to-show", () => win.show());
-
     win.loadFile("index.html");
 
-    // ---------------------------------------------------------
-    // Startup: tempdata folder (programmatic mode)
-    // ---------------------------------------------------------
     win.webContents.on("did-finish-load", () => {
         win.webContents.send("startup-data-file", {
             folder: tempDataDir,
@@ -170,20 +188,9 @@ function createWindow() {
 // -------------------------------------------------------------
 // App lifecycle
 // -------------------------------------------------------------
-app.whenReady().then(() => {
-    createWindow();
-
-    app.on("activate", () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
-        }
-    });
-});
-
+app.whenReady().then(createWindow);
 app.on("before-quit", cleanTempData);
 
 app.on("window-all-closed", () => {
-    if (process.platform !== "darwin") {
-        app.quit();
-    }
+    if (process.platform !== "darwin") app.quit();
 });

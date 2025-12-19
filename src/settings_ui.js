@@ -6,19 +6,6 @@ function lerp(a, b, t) {
     return a + (b - a) * t;
 }
 
-function lerpColor(c0, c1, t) {
-    return {
-        r: Math.round(lerp(c0.r, c1.r, t)),
-        g: Math.round(lerp(c0.g, c1.g, t)),
-        b: Math.round(lerp(c0.b, c1.b, t))
-    };
-}
-
-// Smoothstep easing (better UI feel than linear)
-function smoothstep(t) {
-    return t * t * (3 - 2 * t);
-}
-
 export function computeSettingsLayout(W, H, options) {
 
     const boxSize  = Math.min(Math.max(12, H * 0.35), 20);
@@ -57,17 +44,10 @@ export function computeSettingsLayout(W, H, options) {
         x += fullW;
     }
 
-    // Export button
-    const btnW = W * 0.10;
-    const btnH = H * 0.55;
-    const btnX = W - btnW - padding;
-    const btnY = midY - btnH / 2;
-
     return {
         items,
         fontSize,
-        boxSize,
-        btn: { x: btnX, y: btnY, w: btnW, h: btnH }
+        boxSize
     };
 }
 
@@ -135,49 +115,6 @@ export function drawSettings(ctx, W, H, options) {
         opt.fullH = it.height;
     }
 
-    // -------------------------------------------------
-    // Export button (smooth animated feedback)
-    // -------------------------------------------------
-    const r = Math.min(6, btn.h / 2);
-
-    const pRaw = ctx._exportAnimP ?? 0;
-    const p = smoothstep(Math.max(0, Math.min(1, pRaw)));
-
-    const baseBlue   = { r: 59,  g: 130, b: 246 }; // #3b82f6
-    const successGreen = { r: 34, g: 197, b: 94 }; // #22c55e
-
-    const color =
-        p > 0
-            ? lerpColor(baseBlue, successGreen, p)
-            : baseBlue;
-
-    ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
-
-    ctx.beginPath();
-    ctx.moveTo(btn.x + r, btn.y);
-    ctx.lineTo(btn.x + btn.w - r, btn.y);
-    ctx.quadraticCurveTo(btn.x + btn.w, btn.y, btn.x + btn.w, btn.y + r);
-    ctx.lineTo(btn.x + btn.w, btn.y + btn.h - r);
-    ctx.quadraticCurveTo(btn.x + btn.w, btn.y + btn.h, btn.x + btn.w - r, btn.y + btn.h);
-    ctx.lineTo(btn.x + r, btn.y + btn.h);
-    ctx.quadraticCurveTo(btn.x, btn.y + btn.h, btn.x, btn.y + btn.h - r);
-    ctx.lineTo(btn.x, btn.y + r);
-    ctx.quadraticCurveTo(btn.x, btn.y, btn.x + r, btn.y);
-    ctx.fill();
-
-    // Text: switch only once clearly green
-    ctx.fillStyle = "white";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    const label = (p > 0.35) ? "Exported" : "Export";
-
-    ctx.fillText(
-        label,
-        btn.x + btn.w / 2,
-        btn.y + btn.h / 2
-    );
-
     return layout;
 }
 
@@ -197,14 +134,6 @@ export function hitTestSettings(x, y, layout, options) {
         ) {
             return { type: "checkbox", index: i };
         }
-    }
-
-    const b = layout.btn;
-    if (
-        x >= b.x && x <= b.x + b.w &&
-        y >= b.y && y <= b.y + b.h
-    ) {
-        return { type: "export" };
     }
 
     return null;

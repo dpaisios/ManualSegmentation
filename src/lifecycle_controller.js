@@ -1,6 +1,9 @@
 // -------------------------------------------------------------
 // lifecycle_controller.js
-// Handles data/session loading and overlay logic
+// Handles application lifecycle:
+// - file / folder loading
+// - session resets
+// - tempdata startup
 // -------------------------------------------------------------
 
 import { parseData } from "./parse_data.js";
@@ -15,64 +18,58 @@ export function attachLifecycleController({
     loadData,
     settingsOptions,
 
-    showOverlay,
-    hideOverlay,
     setTitle,
-
     renderers
 }) {
 
-    // ---------------------------------------------------------
-    // HARD RESET BETWEEN FILES (CRITICAL)
-    // ---------------------------------------------------------
-    function resetForNewFile() {
+    // =========================================================
+    // RESET HELPERS
+    // =========================================================
+
+    // Resets selection-related state ONLY (between files)
+    function resetSelectionState() {
         AppState.selections = [];
-        AppState.dataLoaded = false;
         AppState.selectionsVersion = 0;
+        AppState.dataLoaded = false;
         resetLoaderState();
     }
 
-    // ---------------------------------------------------------
-    // Folder inspection helpers
-    // ---------------------------------------------------------
-    const ACCEPTED_EXTS = ["json", "csv", "txt"];
-
-    function countFormats(entries) {
-        const counts = {};
-        for (const e of entries) {
-            counts[e.ext] = (counts[e.ext] ?? 0) + 1;
-        }
-        return counts;
+    // Resets the entire session (between file / folder loads)
+    function resetSessionState() {
+        AppState.fileList = null;                 // file mode invariant
+        AppState.fileIndex = -1;
+        AppState.exportTracker = {};
+        AppState.lastExportedVersionByFile = {};
+        resetSelectionState();
     }
+
+    // =========================================================
+    // FOLDER INSPECTION HELPERS
+    // =========================================================
+
+    const ACCEPTED_EXTS = ["json", "csv", "txt"];
 
     function getExtLower(name) {
         const m = String(name).toLowerCase().match(/\.([a-z0-9]+)$/);
         return m ? m[1] : "";
     }
 
-    async function listFlatFiles(folder) {
-        const names = window.electronAPI.listFiles(folder);
+    async function listFlatFiles(folderPath) {
+        const names = window.electronAPI.listFiles(folderPath);
         const out = [];
 
         for (const name of names) {
-            const full = window.electronAPI.join(folder, name);
-
+            const full = window.electronAPI.join(folderPath, name);
             let stat;
             try {
                 stat = await window.electronAPI.stat(full);
             } catch {
                 continue;
             }
-
             if (stat?.isDirectory?.()) continue;
 
-            out.push({
-                name,
-                full,
-                ext: getExtLower(name)
-            });
+            out.push({ name, full, ext: getExtLower(name) });
         }
-
         return out;
     }
 
@@ -84,44 +81,35 @@ export function attachLifecycleController({
         return [...set].sort();
     }
 
-    // ---------------------------------------------------------
-    // LOAD FILE BY INDEX (FOLDER SESSION MODE)
-    // ---------------------------------------------------------
-    async function loadFileAtIndex(idx, opts = {}) {
-        if (!AppState.fileList) return;
-
-        // Ignore reload of current file unless import is explicitly requested
-        if (
-            AppState.dataLoaded &&
-            idx === AppState.fileIndex &&
-            !opts?.hasSegmentedExport
-        ) {
-            return;
+    function countFormats(entries) {
+        const counts = {};
+        for (const e of entries) {
+            counts[e.ext] = (counts[e.ext] ?? 0) + 1;
         }
+        return counts;
+    }
 
+    // =========================================================
+    // FOLDER SESSION: LOAD FILE BY INDEX
+    // =========================================================
+
+    async function loadFileAtIndex(idx) {
+        if (!AppState.fileList) return;
         if (idx < 0 || idx >= AppState.fileList.length) return;
 
-        // --- UNSAVED SELECTION GUARD (EXPORT-AWARE) ---
+        const filePath = AppState.fileList[idx];
+        const tracked = AppState.exportTracker?.[filePath] ?? null;
+
+        // Unsaved selection guard
         const curPath = AppState.originalFilePath;
-
-        const hasSelections =
-            AppState.selections && AppState.selections.length > 0;
-
-        const exportedInfo =
-            curPath ? AppState.exportTracker?.[curPath] ?? null : null;
-
-        const exportedCount =
-            exportedInfo ? exportedInfo.exportCount : null;
-
-        const currentCount =
-            AppState.selections?.length ?? 0;
+        const hasSelections = AppState.selections?.length > 0;
+        const curTracked = curPath
+            ? AppState.exportTracker?.[curPath] ?? null
+            : null;
 
         const unexported =
             hasSelections &&
-            (
-                exportedInfo === null ||
-                exportedCount !== currentCount
-            );
+            (!curTracked || curTracked.exportCount !== AppState.selections.length);
 
         if (unexported) {
             const ok = window.confirm(
@@ -132,40 +120,16 @@ export function attachLifecycleController({
             if (!ok) return;
         }
 
-        // -------------------------------------------------
-        // HARD RESET
-        // -------------------------------------------------
-        resetForNewFile();
+        resetSelectionState();
 
-        const filePath = AppState.fileList[idx];
-        const txt  = await window.electronAPI.readFile(filePath);
+        const txt = await window.electronAPI.readFile(filePath);
         const rows = parseData(txt, filePath);
 
-        // Canonical raw load (this defines AppState.T, X, Y, etc.)
         loadData(rows, null, null, settingsOptions);
 
-        // -------------------------------------------------
-        // AUTO-IMPORT FROM SEGMENTED EXPORT (TIME-BASED)
-        // -------------------------------------------------
-        const tracked = AppState.exportTracker?.[filePath] ?? null;
-
-        const shouldImport =
-            opts.hasSegmentedExport ||
-            (
-                tracked?.exportPath &&
-                (!AppState.selections || AppState.selections.length === 0)
-            );
-
-        if (shouldImport && tracked?.exportPath) {
+        // Auto-import segmented export
+        if (tracked?.exportPath) {
             try {
-                
-                console.log(
-                    "IMPORT CHECK",
-                    "timeColIndex =", AppState.timeColIndex,
-                    "timeColName =", AppState.timeColName,
-                    "file =", filePath
-                );
-
                 const imported = await importSelectionsFromSegmentedExport({
                     exportPath: tracked.exportPath,
                     baseT: AppState.T
@@ -179,56 +143,41 @@ export function attachLifecycleController({
             }
         }
 
-        // -------------------------------------------------
-        // FINALIZE STATE
-        // -------------------------------------------------
         AppState.fileIndex = idx;
         AppState.originalFileName = filePath.split(/[/\\]/).pop();
         AppState.originalFilePath = filePath;
         AppState.dataLoaded = true;
 
         setTitle(AppState.originalFileName);
-        hideOverlay();
         renderers.redrawAll();
     }
 
-    // ---------------------------------------------------------
-    // LOAD NEWEST FILE IN FOLDER (TEMPDATA MODE)
-    // ---------------------------------------------------------
-    async function loadNewestFileInFolder(folder, params) {
-        const files = window.electronAPI.listJson(folder);
+    // =========================================================
+    // TEMPDATA MODE
+    // =========================================================
 
-        console.log("[TEMPDATA] listJson →", files);
+    async function loadNewestFileInFolder(folderPath, params) {
+        const files = window.electronAPI.listJson(folderPath);
+        if (!files.length) return;
 
-        if (!files.length) {
-            console.warn("[TEMPDATA] no json files found");
-            showOverlay();
-            return;
-        }
-
-        let newestPath = null;
+        let newest = null;
         let newestTime = -Infinity;
 
         for (const f of files) {
-            const full = window.electronAPI.join(folder, f);
+            const full = window.electronAPI.join(folderPath, f);
             const stat = await window.electronAPI.stat(full);
             if (stat.ctimeMs > newestTime) {
                 newestTime = stat.ctimeMs;
-                newestPath = full;
+                newest = full;
             }
         }
 
-        if (!newestPath) {
-            showOverlay();
-            return;
-        }
+        if (!newest) return;
 
-        console.log("[TEMPDATA] loading newest =", newestPath);
+        resetSessionState();
 
-        resetForNewFile();
-
-        const txt = await window.electronAPI.readFile(newestPath);
-        const rows = parseData(txt, newestPath);
+        const txt = await window.electronAPI.readFile(newest);
+        const rows = parseData(txt, newest);
 
         loadData(
             rows,
@@ -237,55 +186,26 @@ export function attachLifecycleController({
             settingsOptions
         );
 
-        AppState.originalFileName = newestPath.split(/[/\\]/).pop();
-        AppState.originalFilePath = newestPath;
-        AppState.fileList = null;
-        AppState.fileIndex = -1;
+        AppState.originalFileName = newest.split(/[/\\]/).pop();
+        AppState.originalFilePath = newest;
         AppState.dataLoaded = true;
 
         setTitle(AppState.originalFileName);
-        hideOverlay();
         renderers.redrawAll();
     }
 
-    // ---------------------------------------------------------
-    // LOAD ENTRY POINT (FILE OR FOLDER)
-    // ---------------------------------------------------------
-    async function loadFromPath(folder, params = {}) {
-        console.log(
-            "[LIFECYCLE] loadFromPath",
-            "folder =", folder,
-            "params =", params
-        );
+    // =========================================================
+    // ENTRY POINT: LOAD FILE OR FOLDER
+    // =========================================================
 
-        if (!folder) {
-            console.log("[LIFECYCLE] no folder → showOverlay");
-            showOverlay();
-            return;
-        }
+    async function loadFromPath(path, params = {}) {
+        if (!path) return;
 
-        const isDir = window.electronAPI.isDirectory(folder);
-        console.log("[LIFECYCLE] isDirectory =", isDir);
-
-        // -----------------------------------------------------
-        // EXPLICIT RESET FOR NEW FOLDER SESSION
-        // -----------------------------------------------------
         if (params.reset) {
-            console.log("[LIFECYCLE] FULL SESSION RESET");
-
-            AppState.fileList  = null;
-            AppState.fileIndex = -1;
-
-            AppState.exportTracker = {};
-            AppState.lastExportedVersionByFile = {};
-
-            // Prevent unsaved-selection guard
-            AppState.selections = [];
-            AppState.selectionsVersion = 0;
-            AppState.dataLoaded = false;
-
-            resetLoaderState();
+            resetSessionState();
         }
+
+        const isDir = window.electronAPI.isDirectory(path);
 
         // -----------------------------------------------------
         // FOLDER MODE
@@ -293,23 +213,15 @@ export function attachLifecycleController({
         if (isDir) {
 
             if (params.mode === "tempdata") {
-                console.log("[LIFECYCLE] entering TEMPDATA mode");
-                await loadNewestFileInFolder(folder, params);
+                await loadNewestFileInFolder(path, params);
                 return;
             }
 
-            console.log("[LIFECYCLE] entering FOLDER-SESSION mode");
-
-            const entries = await listFlatFiles(folder);
-            console.log("[LIFECYCLE] listFlatFiles →", entries.length);
-
+            const entries = await listFlatFiles(path);
             const formats = detectAcceptedFormats(entries);
-            console.log("[LIFECYCLE] detected formats →", formats);
 
             if (!formats.length) {
-                console.warn("[LIFECYCLE] no accepted formats found");
                 alert("No supported data files found (json, csv, txt).");
-                showOverlay();
                 return;
             }
 
@@ -318,16 +230,11 @@ export function attachLifecycleController({
             if (formats.length === 1) {
                 chosenExts = [formats[0]];
             } else {
-                const formatCounts = countFormats(
+                const counts = countFormats(
                     entries.filter(e => formats.includes(e.ext))
                 );
-
-                chosenExts = await showFormatSelectionModal(formatCounts);
-                if (!chosenExts) {
-                    console.warn("[LIFECYCLE] format selection cancelled");
-                    showOverlay();
-                    return;
-                }
+                chosenExts = await showFormatSelectionModal(counts);
+                if (!chosenExts) return;
             }
 
             const files = entries
@@ -335,28 +242,20 @@ export function attachLifecycleController({
                 .map(e => e.full)
                 .sort();
 
-            console.log("[LIFECYCLE] files selected →", files.length);
-
             if (!files.length) {
                 alert("No files matched the selected format(s).");
-                showOverlay();
                 return;
             }
 
+            AppState.fileList = files;
+            AppState.fileIndex = 0;
             AppState.exportTracker = {};
             AppState.lastExportedVersionByFile = {};
-            AppState.fileList  = files;
-            AppState.fileIndex = 0;
-
-            console.log(
-                "[LIFECYCLE] starting folder session",
-                "fileList.length =", files.length
-            );
 
             await scanExportsForFolderSession({
                 AppState,
-                dataFilesAbs: AppState.fileList,
-                dataFolderAbs: folder
+                dataFilesAbs: files,
+                dataFolderAbs: path
             });
 
             await loadFileAtIndex(0);
@@ -366,12 +265,10 @@ export function attachLifecycleController({
         // -----------------------------------------------------
         // FILE MODE
         // -----------------------------------------------------
-        console.log("[LIFECYCLE] entering FILE mode");
+        resetSessionState();
 
-        resetForNewFile();
-
-        const txt  = await window.electronAPI.readFile(folder);
-        const rows = parseData(txt, folder);
+        const txt = await window.electronAPI.readFile(path);
+        const rows = parseData(txt, path);
 
         loadData(
             rows,
@@ -380,67 +277,28 @@ export function attachLifecycleController({
             settingsOptions
         );
 
-        const fileName = folder.split(/[/\\]/).pop();
-
-        AppState.originalFileName = fileName;
-        AppState.originalFilePath = folder;
-        AppState.fileList  = null;
-        AppState.fileIndex = -1;
+        AppState.originalFileName = path.split(/[/\\]/).pop();
+        AppState.originalFilePath = path;
         AppState.dataLoaded = true;
 
-        setTitle(fileName);
-        hideOverlay();
+        setTitle(AppState.originalFileName);
         renderers.redrawAll();
     }
 
-    // ---------------------------------------------------------
-    // ELECTRON IPC ENTRY
-    // ---------------------------------------------------------
+    // =========================================================
+    // ELECTRON IPC
+    // =========================================================
+
     function attachElectronListener() {
         window.electronAPI.onDataFile(({ folder, params }) => {
-            console.log(
-                "[LIFECYCLE] onDataFile received",
-                "folder =", folder,
-                "params =", params
-            );
             loadFromPath(folder, params);
         });
     }
 
-    // ---------------------------------------------------------
-    // MANUAL "OPEN FILE" BUTTON
-    // ---------------------------------------------------------
-    function attachManualOpen(buttonEl, exportPathOverrideGlobal) {
-        buttonEl.addEventListener("click", async () => {
-            const res = await window.electronAPI.openFileDialog();
-            if (res.canceled) return;
+    // =========================================================
+    // NAVIGATION API
+    // =========================================================
 
-            const filePath = res.filePaths[0];
-
-            resetForNewFile();
-
-            const raw = await window.electronAPI.readFile(filePath);
-            const rows = parseData(raw, filePath);
-
-            loadData(rows, null, exportPathOverrideGlobal, settingsOptions);
-
-            const fileName = filePath.split(/[/\\]/).pop();
-
-            AppState.originalFileName = fileName;
-            AppState.originalFilePath = filePath;
-            AppState.fileList = null;
-            AppState.fileIndex = -1;
-            AppState.dataLoaded = true;
-
-            setTitle(fileName);
-            hideOverlay();
-            renderers.redrawAll();
-        });
-    }
-
-    // ---------------------------------------------------------
-    // NAVIGATION API (PREV / NEXT)
-    // ---------------------------------------------------------
     function nextFile() {
         if (!AppState.fileList) return;
         loadFileAtIndex(AppState.fileIndex + 1);
@@ -451,14 +309,14 @@ export function attachLifecycleController({
         loadFileAtIndex(AppState.fileIndex - 1);
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // PUBLIC API
-    // ---------------------------------------------------------
+    // =========================================================
+
     return {
         attachElectronListener,
-        attachManualOpen,
-        prevFile,
+        loadFileAtIndex,
         nextFile,
-        loadFileAtIndex
+        prevFile
     };
 }

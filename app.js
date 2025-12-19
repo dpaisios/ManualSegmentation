@@ -36,81 +36,22 @@ import * as ID from "./src/selection_ids.js";
 import { createLabelEditor } from "./src/label_editor.js";
 import { attachTimeBarController } from "./src/time_bar_controller.js";
 import { placeIcon, clearOverlay, placeLabel } from "./src/icons_overlay.js";
-import {
-    computeClusterLayout
-} from "./src/time_bar_primitives.js";
+import { computeClusterLayout } from "./src/time_bar_primitives.js";
 
-// -------------------------------------------------------------
-// Export options
-// -------------------------------------------------------------
-function attachExportOptionsUI() {
-    const rRelative = document.getElementById("exportModeRelative");
-    const rFixed    = document.getElementById("exportModeFixed");
-    const rManual   = document.getElementById("exportModeManual");
-
-    const chooseBtn = document.getElementById("chooseExportFolderBtn");
-    const pathEl    = document.getElementById("exportFolderPath");
-
-    if (!rRelative || !rFixed || !rManual || !chooseBtn || !pathEl) return;
-
-    function syncUIFromState() {
-        const cfg = AppState.exportConfig;
-
-        rRelative.checked = cfg.mode === "relative";
-        rFixed.checked    = cfg.mode === "fixed";
-        rManual.checked   = cfg.mode === "manual";
-
-        chooseBtn.disabled = cfg.mode !== "fixed";
-        pathEl.textContent = cfg.fixedPath ? cfg.fixedPath : "(none)";
-        pathEl.title = cfg.fixedPath ? cfg.fixedPath : "";
-    }
-
-    rRelative.addEventListener("change", () => {
-        if (!rRelative.checked) return;
-        AppState.exportConfig.mode = "relative";
-        syncUIFromState();
-    });
-
-    rManual.addEventListener("change", () => {
-        if (!rManual.checked) return;
-        AppState.exportConfig.mode = "manual";
-        syncUIFromState();
-    });
-
-    rFixed.addEventListener("change", () => {
-        if (!rFixed.checked) return;
-        AppState.exportConfig.mode = "fixed";
-        // do not force user to pick immediately
-        syncUIFromState();
-    });
-
-    chooseBtn.addEventListener("click", async () => {
-        const res = await window.electronAPI.openFolderDialog();
-        if (res.canceled) return;
-
-        const folder = res.filePaths?.[0];
-        if (!folder) return;
-
-        AppState.exportConfig.fixedPath = folder;
-        AppState.exportConfig.mode = "fixed";
-        syncUIFromState();
-    });
-
-    syncUIFromState();
-}
-
-// call once during init (near the bottom before showing overlay is fine)
-attachExportOptionsUI();
+import { createExportSuccessAnimator } from "./src/settings_controller.js";
 
 // -------------------------------------------------------------
 // Canvases
 // -------------------------------------------------------------
 const xyCanvas       = document.getElementById("xyCanvas");
 const xyCtx          = xyCanvas.getContext("2d");
+
 const timeCanvas     = document.getElementById("timeCanvas");
 const timeCtx        = timeCanvas.getContext("2d");
+
 const settingsCanvas = document.getElementById("settingsCanvas");
 const settingsCtx    = settingsCanvas.getContext("2d");
+
 
 // -------------------------------------------------------------
 // Settings
@@ -121,6 +62,7 @@ let settingsOptions = [
     { label: "Show lifts",        checked: true }
 ];
 
+
 // -------------------------------------------------------------
 // Visibility policy
 // -------------------------------------------------------------
@@ -129,12 +71,14 @@ const visibility = createVisibilityPolicy({
     settingsOptions
 });
 
+
 // -------------------------------------------------------------
 // Helpers
 // -------------------------------------------------------------
 function smoothApproach(a, b, s = 0.2) {
     return a + (b - a) * s;
 }
+
 
 // -------------------------------------------------------------
 // Title bar
@@ -143,6 +87,7 @@ const titleBarController = attachTitleBar({
     titleBarEl: document.getElementById("titleBar"),
     AppState
 });
+
 
 // -------------------------------------------------------------
 // Redraw implementations
@@ -182,7 +127,12 @@ function redrawXY() {
 
     const box = xyController?.getSelectBox?.() ?? null;
     if (box) {
-        XY.drawXYSelectionBox(xyCtx, box, xyCanvas.width, xyCanvas.height);
+        XY.drawXYSelectionBox(
+            xyCtx,
+            box,
+            xyCanvas.width,
+            xyCanvas.height
+        );
     }
 }
 
@@ -203,12 +153,11 @@ function redrawTimeBar(state) {
     );
 
     clearOverlay("timebar-");
-
-    const timeCanvasRect = timeCanvas.getBoundingClientRect();
-    const offsetX = timeCanvasRect.left + window.scrollX;
-    const offsetY = timeCanvasRect.top  + window.scrollY;
-
     clearOverlay("timebar-label-");
+
+    const rect = timeCanvas.getBoundingClientRect();
+    const offsetX = rect.left + window.scrollX;
+    const offsetY = rect.top  + window.scrollY;
 
     for (let i = 0; i < AppState.selections.length; i++) {
         const sel = AppState.selections[i];
@@ -258,7 +207,6 @@ function redrawTimeBar(state) {
 }
 
 function redrawSettings() {
-    // 🔒 Guard: settingsController may not exist during early init
     if (!settingsController) return;
 
     const layout = drawSettings(
@@ -267,8 +215,10 @@ function redrawSettings() {
         settingsCanvas.height,
         settingsOptions
     );
+
     settingsController.setLayout(layout);
 }
+
 
 // -------------------------------------------------------------
 // Render orchestration
@@ -279,6 +229,7 @@ const renderers = createRenderers({
     redrawSettings
 });
 
+
 // -------------------------------------------------------------
 // Export controller
 // -------------------------------------------------------------
@@ -286,6 +237,11 @@ const exportController = createExportController({
     AppState,
     extractRowsForExport,
     buildExportJSON
+});
+
+const runTitleExportSuccess = createExportSuccessAnimator({
+    onUpdate: p => titleBarController.setExportSuccess(p),
+    onDone: () => titleBarController.setExportSuccess(0)
 });
 
 // -------------------------------------------------------------
@@ -307,6 +263,7 @@ const labelEditor = createLabelEditor({
     },
     onCancel: () => renderers.redrawTimeBar()
 });
+
 
 // -------------------------------------------------------------
 // Controllers
@@ -330,13 +287,11 @@ const xyController = attachXYController({
     canvas: xyCanvas,
     AppState,
     renderers,
-
     computeTimeRangesFromXYBox: box => {
-        const visibleIndices = visibility.getVisibleIndices(X.length);
-
+        const visible = visibility.getVisibleIndices(X.length);
         const transform = XY.computeXYTransform(
             X, Y,
-            visibleIndices,
+            visible,
             xyCanvas.width,
             xyCanvas.height
         );
@@ -344,7 +299,7 @@ const xyController = attachXYController({
         return computeTimeRangesFromXYBox({
             box,
             X, Y, T,
-            visibleIndices,
+            visibleIndices: visible,
             transform,
             canvasHeight: xyCanvas.height
         });
@@ -363,15 +318,6 @@ const settingsController = attachSettingsController({
     exportData: exportController.exportData
 });
 
-// -------------------------------------------------------------
-// Overlay helpers
-// -------------------------------------------------------------
-function showOverlay() {
-    document.getElementById("fileOverlay").classList.remove("hidden");
-}
-function hideOverlay() {
-    document.getElementById("fileOverlay").classList.add("hidden");
-}
 
 // -------------------------------------------------------------
 // Lifecycle
@@ -380,47 +326,47 @@ const lifecycle = attachLifecycleController({
     AppState,
     loadData,
     settingsOptions,
-    showOverlay,
-    hideOverlay,
-    setTitle: txt => {
-        AppState.originalFileName = txt;
+    setTitle: () => {
         titleBarController.updateTitleBar();
     },
     renderers
 });
 
 titleBarController.setLifecycle(lifecycle);
+
+
+// -------------------------------------------------------------
+// Title-bar export handler (guarded)
+// -------------------------------------------------------------
+let exporting = false;
+
+titleBarController.setExportHandler(async () => {
+    if (exporting) return;
+    exporting = true;
+
+    try {
+        const ok = await exportController.exportData();
+        if (ok) runTitleExportSuccess();
+    } finally {
+        setTimeout(() => { exporting = false; }, 1600);
+    }
+});
+
+
+// -------------------------------------------------------------
+// Electron wiring
+// -------------------------------------------------------------
 lifecycle.attachElectronListener();
 
-lifecycle.attachManualOpen(
-    document.getElementById("openFileBtn"),
-    exportPathOverrideGlobal
-);
-
 // -------------------------------------------------------------
-// Open Folder button
-// -------------------------------------------------------------
-const openFolderBtn = document.getElementById("openFolderBtn");
-
-if (openFolderBtn) {
-    openFolderBtn.addEventListener("click", async () => {
-        const res = await window.electronAPI.openFolderDialog();
-        if (res.canceled) return;
-
-        window.electronAPI.emitDataFile({
-            folder: res.filePaths[0],
-            params: { mode: "folder-session" }
-        });
-    });
-}
-
-// -------------------------------------------------------------
-// Resize
+// Resize handling
 // -------------------------------------------------------------
 function applyCanvasSizesNow() {
-    if (xyCanvas.clientWidth === 0 || xyCanvas.clientHeight === 0) return;
-    if (timeCanvas.clientWidth === 0 || timeCanvas.clientHeight === 0) return;
-    if (settingsCanvas.clientWidth === 0 || settingsCanvas.clientHeight === 0) return;
+    if (
+        xyCanvas.clientWidth === 0 || xyCanvas.clientHeight === 0 ||
+        timeCanvas.clientWidth === 0 || timeCanvas.clientHeight === 0 ||
+        settingsCanvas.clientWidth === 0 || settingsCanvas.clientHeight === 0
+    ) return;
 
     xyCanvas.width = xyCanvas.clientWidth;
     xyCanvas.height = xyCanvas.clientHeight;
@@ -439,7 +385,6 @@ function resizeCanvases() {
 
     requestAnimationFrame(() => {
         resizePending = false;
-
         applyCanvasSizesNow();
 
         AppState.dataLoaded
@@ -451,8 +396,9 @@ function resizeCanvases() {
 }
 window.addEventListener("resize", resizeCanvases);
 
+
 // -------------------------------------------------------------
-// Animation
+// Animation loop (bubble fade)
 // -------------------------------------------------------------
 function animate() {
     let need = false;
@@ -471,6 +417,7 @@ function animate() {
     requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);
+
 
 // -------------------------------------------------------------
 // Init

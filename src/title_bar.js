@@ -1,102 +1,255 @@
 // -------------------------------------------------------------
 // title_bar.js
-// Handles title bar DOM (filename, prev/next, dropdown)
+// Title bar controller:
+// - file / folder buttons
+// - filename display
+// - folder dropdown + navigation
 // -------------------------------------------------------------
 
 export function attachTitleBar({
     titleBarEl,
     AppState
 }) {
+    // ---------------------------------------------------------
+    // Internal state
+    // ---------------------------------------------------------
     let fileDropdown = null;
     let lifecycle = null;
+    let prevBtn = null;
+    let onDocMouseDown = null;
 
+    // ---------------------------------------------------------
+    // Static DOM references
+    // ---------------------------------------------------------
     const left  = titleBarEl.querySelector(".title-left");
     const label = titleBarEl.querySelector(".title-label");
     const arrow = titleBarEl.querySelector(".dropdown-arrow");
     const nav   = titleBarEl.querySelector(".title-nav");
 
-    let prevBtn = null;
+    // =========================================================
+    // FILE BUTTON (file-only)
+    // =========================================================
+    const fileBtn = document.createElement("button");
+    fileBtn.className = "title-file-btn";
+    fileBtn.title = "Open file";
 
-    // keep a stable reference so we can remove it on close
-    let onDocMouseDown = null;
+    const fileIcon = document.createElement("span");
+    fileIcon.className = "title-icon title-file-icon";
+    fileBtn.appendChild(fileIcon);
 
-    // ---------------------------------------------------------
-    // Folder button (left of dropdown arrow)
-    // ---------------------------------------------------------
+    fileBtn.dataset.state = "idle";
+
+    fileBtn.addEventListener("mouseenter", () => {
+        fileBtn.dataset.state = "hover";
+    });
+
+    fileBtn.addEventListener("mouseleave", () => {
+        fileBtn.dataset.state = "idle";
+    });
+
+    fileBtn.addEventListener("mousedown", async e => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const res = await window.electronAPI.openFileDialog();
+        if (res.canceled || !res.filePaths?.length) return;
+
+        window.electronAPI.emitDataFile({
+            folder: res.filePaths[0],
+            params: { reset: true }
+        });
+    });
+
+    // =========================================================
+    // FOLDER BUTTON (folder-only)
+    // =========================================================
     const folderBtn = document.createElement("button");
     folderBtn.className = "title-folder-btn";
-    folderBtn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24">
-            <path d="M3 6.5h6l2 2h10v9.5a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2v-9.5a2 2 0 0 1 2-2z"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.6"
-                  stroke-linejoin="round"/>
-        </svg>
-    `;
-    folderBtn.title = "Open file / folder";
+    folderBtn.title = "Open folder";
 
+    const folderIcon = document.createElement("span");
+    folderIcon.className = "title-icon title-folder-icon";
+    folderBtn.appendChild(folderIcon);
+
+    folderBtn.dataset.state = "folder-idle";
+
+    folderBtn.addEventListener("mouseenter", () => {
+        folderBtn.dataset.state = "folder-hover";
+    });
+
+    folderBtn.addEventListener("mouseleave", () => {
+        folderBtn.dataset.state = "folder-idle";
+    });
+
+    folderBtn.addEventListener("mousedown", async e => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const res = await window.electronAPI.openFolderDialog();
+        if (res.canceled || !res.filePaths?.length) return;
+
+        window.electronAPI.emitDataFile({
+            folder: res.filePaths[0],
+            params: { mode: "folder-session", reset: true }
+        });
+    });
+
+    // Insert buttons in stable order
     left.insertBefore(folderBtn, arrow);
+    left.insertBefore(fileBtn, folderBtn);
 
-    // ---------------------------------------------------------
-    // Dropdown hit zone (visual + logical)
-    // ---------------------------------------------------------
+    // =========================================================
+    // EXPORT BUTTON
+    // =========================================================
+    const exportBtn = document.createElement("button");
+    exportBtn.className = "title-export-btn";
+    exportBtn.title = "Save segmentation";
+
+    const exportIcon = document.createElement("span");
+    exportIcon.className = "title-icon title-export-icon";
+    exportBtn.appendChild(exportIcon);
+
+    exportBtn.dataset.state = "idle";
+
+    exportBtn.addEventListener("mouseenter", () => {
+        if (exportBtn.dataset.state === "idle") {
+            exportBtn.dataset.state = "hover";
+        }
+    });
+
+    exportBtn.addEventListener("mouseleave", () => {
+        if (exportBtn.dataset.state === "hover") {
+            exportBtn.dataset.state = "idle";
+        }
+    });
+
+    function setExportSuccess(progress) {
+        if (progress > 0) {
+            exportBtn.dataset.state = "success";
+            exportBtn.style.pointerEvents = "none";
+        } else {
+            exportBtn.dataset.state = "idle";
+            exportBtn.style.pointerEvents = "";
+        }
+    }
+
+    // =========================================================
+    // DROPDOWN HIT ZONE
+    // =========================================================
     const hitZone = document.createElement("div");
     hitZone.className = "dropdownHitZone";
     titleBarEl.appendChild(hitZone);
 
+    // =========================================================
+    // LIFECYCLE BINDING
+    // =========================================================
     function setLifecycle(lc) {
         lifecycle = lc;
     }
 
+    // =========================================================
+    // TITLE BAR UPDATE (AUTHORITATIVE)
+    // =========================================================
     function updateTitleBar() {
-        if (!AppState.dataLoaded) {
-            titleBarEl.style.display = "none";
-            return;
-        }
 
+        // -----------------------------------------------------
+        // 1. Title bar is ALWAYS visible
+        // -----------------------------------------------------
         titleBarEl.style.display = "flex";
-        label.textContent = AppState.originalFileName ?? "";
 
+        // -----------------------------------------------------
+        // 2. Reset dynamic elements
+        // -----------------------------------------------------
         nav.innerHTML = "";
         prevBtn = null;
 
+        // -----------------------------------------------------
+        // 3. No data loaded yet → minimal mode
+        // -----------------------------------------------------
+        if (!AppState.dataLoaded) {
+
+            label.textContent = "";
+            arrow.style.display = "none";
+
+            hitZone.classList.remove("active");
+            closeDropdown();
+
+            // Export disabled
+            if (exportBtn.parentNode) {
+                exportBtn.remove();
+            }
+
+            return;
+        }
+
+        // -----------------------------------------------------
+        // 4. Update title text
+        // -----------------------------------------------------
+        label.textContent = AppState.originalFileName ?? "";
+
+        // -----------------------------------------------------
+        // 5. Determine mode
+        // -----------------------------------------------------
         const inFolderMode =
             Array.isArray(AppState.fileList) &&
             AppState.fileList.length > 0;
 
-        // Arrow only visible in folder mode
         arrow.style.display = inFolderMode ? "" : "none";
+        folderBtn.dataset.state = "folder-idle";
+
+        // -----------------------------------------------------
+        // 6. Ensure export button placement (stable DOM)
+        // -----------------------------------------------------
+        const exportParent = exportBtn.parentNode;
 
         if (!inFolderMode) {
+            // FILE MODE
+            // No dropdown, no navigation
+
             hitZone.classList.remove("active");
             closeDropdown();
+
+            if (exportParent !== left || exportBtn.previousSibling !== folderBtn) {
+                left.insertBefore(exportBtn, label);
+            }
+
             return;
         }
 
-        // PREV
+        // -----------------------------------------------------
+        // 7. Folder mode layout
+        // -----------------------------------------------------
+        if (exportParent !== left || exportBtn.nextSibling !== arrow) {
+            left.insertBefore(exportBtn, arrow);
+        }
+
+        // -----------------------------------------------------
+        // 8. Prev / Next navigation
+        // -----------------------------------------------------
         const prev = document.createElement("button");
         prev.innerHTML = `
             <svg width="14" height="14" viewBox="0 0 24 24">
                 <path d="M15 6l-6 6 6 6"
-                      fill="none" stroke="currentColor" stroke-width="2"
-                      stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-        `;
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"/>
+            </svg>`;
         prev.disabled = AppState.fileIndex <= 0;
         prev.onclick = () => lifecycle?.prevFile();
 
-        // NEXT
         const next = document.createElement("button");
         next.innerHTML = `
             <svg width="14" height="14" viewBox="0 0 24 24">
                 <path d="M9 6l6 6-6 6"
-                      fill="none" stroke="currentColor" stroke-width="2"
-                      stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-        `;
-        next.disabled =
-            AppState.fileIndex >= AppState.fileList.length - 1;
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"/>
+            </svg>`;
+        next.disabled = AppState.fileIndex >= AppState.fileList.length - 1;
         next.onclick = () => lifecycle?.nextFile();
 
         nav.append(prev, next);
@@ -105,6 +258,9 @@ export function attachTitleBar({
         updateHitZone();
     }
 
+    // =========================================================
+    // HIT ZONE + DROPDOWN HELPERS
+    // =========================================================
     function updateHitZone() {
         if (!prevBtn) {
             hitZone.classList.remove("active");
@@ -127,16 +283,12 @@ export function attachTitleBar({
         hitZone.style.width = `${w}px`;
     }
 
-    function isInDropdownZone(clientX) {
+    function isInDropdownZone(x) {
         if (!prevBtn || arrow.style.display === "none") return false;
 
-        const arrowRect = arrow.getBoundingClientRect();
-        const prevRect  = prevBtn.getBoundingClientRect();
-
-        return (
-            clientX >= arrowRect.left &&
-            clientX <= prevRect.left
-        );
+        const a = arrow.getBoundingClientRect();
+        const p = prevBtn.getBoundingClientRect();
+        return x >= a.left && x <= p.left;
     }
 
     function closeDropdown() {
@@ -293,60 +445,9 @@ export function attachTitleBar({
         }, 0);
     }
 
-    // ---------------------------------------------------------
-    // Folder button behavior
-    // ---------------------------------------------------------
-    folderBtn.addEventListener("mousedown", async e => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        console.log(
-            "[TITLEBAR] folderBtn mousedown",
-            "AppState.fileList =", AppState.fileList
-        );
-
-        // OPEN FILE MODE
-        if (!AppState.fileList) {
-            const res = await window.electronAPI.openFileDialog();
-            if (res.canceled) return;
-
-            console.log(
-                "[TITLEBAR] open-file selected",
-                res.filePaths[0]
-            );
-
-            window.electronAPI.emitDataFile({
-                folder: res.filePaths[0],
-                params: {}
-            });
-            return;
-        }
-
-        // OPEN FOLDER MODE
-        const res = await window.electronAPI.openFolderDialog();
-        if (res.canceled) return;
-
-        console.log(
-            "[TITLEBAR] open-folder selected",
-            res.filePaths[0]
-        );
-
-        const payload = {
-            folder: res.filePaths[0],
-            params: {
-                mode: "folder-session",
-                reset: true
-            }
-        };
-
-        console.log("[TITLEBAR] emitDataFile payload =", payload);
-
-        window.electronAPI.emitDataFile(payload);
-    });
-
-    // ---------------------------------------------------------
-    // Hover + click logic (arrow INCLUDED)
-    // ---------------------------------------------------------
+    // =========================================================
+    // TITLE BAR INTERACTION
+    // =========================================================
     titleBarEl.addEventListener("mousemove", e => {
         if (isInDropdownZone(e.clientX)) {
             updateHitZone();
@@ -363,7 +464,6 @@ export function attachTitleBar({
     titleBarEl.addEventListener("mousedown", e => {
         if (!AppState.fileList) return;
 
-        // Clicking anywhere else on the title bar closes the dropdown
         if (fileDropdown && !isInDropdownZone(e.clientX)) {
             closeDropdown();
             return;
@@ -376,8 +476,15 @@ export function attachTitleBar({
         }
     });
 
+    // =========================================================
+    // PUBLIC API
+    // =========================================================
     return {
         updateTitleBar,
-        setLifecycle
+        setLifecycle,
+        setExportHandler(fn) {
+            exportBtn.onclick = fn;
+        },
+        setExportSuccess
     };
 }

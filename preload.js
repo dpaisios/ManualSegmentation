@@ -1,3 +1,8 @@
+// -------------------------------------------------------------
+// preload.js
+// Secure bridge between renderer and Node/Electron APIs
+// -------------------------------------------------------------
+
 const { contextBridge, ipcRenderer } = require("electron");
 const fs = require("fs");
 const path = require("path");
@@ -7,39 +12,45 @@ contextBridge.exposeInMainWorld("electronAPI", {
     // ---------------------------------------------------------
     // File system helpers
     // ---------------------------------------------------------
-    readFile: (filePath) => fs.promises.readFile(filePath, "utf8"),
 
-    exists: (p) => fs.existsSync(p),
-    isDirectory: (p) => fs.existsSync(p) && fs.lstatSync(p).isDirectory(),
+    readFile: (filePath) =>
+        fs.promises.readFile(filePath, "utf8"),
 
-    // Legacy (still used for tempdata mode)
+    exists: (p) =>
+        fs.existsSync(p),
+
+    isDirectory: (p) =>
+        fs.existsSync(p) && fs.lstatSync(p).isDirectory(),
+
+    // Legacy (tempdata mode)
     listJson: (folder) =>
-        fs.readdirSync(folder).filter(f => f.toLowerCase().endsWith(".json")),
+        fs.readdirSync(folder).filter(f =>
+            f.toLowerCase().endsWith(".json")
+        ),
 
-    // Generic file listing (non-recursive)
-    listFiles: (folder, extensions) =>
+    // Non-recursive listing (ALL entries)
+    listFiles: (folder) =>
+        fs.readdirSync(folder),
+
+    // Explicit extension-filtered listing
+    listFilesWithExtensions: (folder, extensions) =>
         fs.readdirSync(folder).filter(f => {
-            if (!extensions || extensions.length === 0) return true;
             const ext = path.extname(f).slice(1).toLowerCase();
             return extensions.includes(ext);
         }),
 
-    join: (...parts) => path.join(...parts),
+    join: (...parts) =>
+        path.join(...parts),
 
-    dirname: (p) => path.dirname(p),
+    dirname: (p) =>
+        path.dirname(p),
 
-    mkdir: (dirPath, opts = { recursive: true }) => fs.mkdirSync(dirPath, opts),
+    mkdir: (dirPath, opts = { recursive: true }) =>
+        fs.mkdirSync(dirPath, opts),
 
-    writeFile: (filePath, data) => fs.writeFileSync(filePath, data),
+    writeFile: (filePath, data) =>
+        fs.writeFileSync(filePath, data),
 
-    // ---------------------------------------------------------
-    // Stats via main (safe)
-    // ---------------------------------------------------------
-    stat: (filePath) => ipcRenderer.invoke("fs-stat", filePath),
-
-    // ---------------------------------------------------------
-    // Delete export in folder
-    // ---------------------------------------------------------
     deleteFile: (filePath) => {
         try {
             fs.unlinkSync(filePath);
@@ -49,25 +60,41 @@ contextBridge.exposeInMainWorld("electronAPI", {
             return false;
         }
     },
+
+    // ---------------------------------------------------------
+    // Stats via main (safe)
+    // ---------------------------------------------------------
+
+    stat: (filePath) =>
+        ipcRenderer.invoke("fs-stat", filePath),
+
     // ---------------------------------------------------------
     // Dialogs
     // ---------------------------------------------------------
-    openFileDialog: () => ipcRenderer.invoke("open-file-dialog"),
-    openFolderDialog: () => ipcRenderer.invoke("open-folder-dialog"),
 
-    // NEW: folder format selection dialog
+    openFileDialog: () =>
+        ipcRenderer.invoke("open-file-dialog"),
+
+    openFolderDialog: () =>
+        ipcRenderer.invoke("open-folder-dialog"),
+
+    saveFileDialog: (options) =>
+        ipcRenderer.invoke("save-file-dialog", options),
+
+    // NEW: export mode chooser (required)
+    chooseExportMode: () =>
+        ipcRenderer.invoke("choose-export-mode"),
+
     selectFolderFormats: (formats) =>
         ipcRenderer.invoke("select-folder-formats", formats),
 
     // ---------------------------------------------------------
-    // IPC: startup / programmatic loading
+    // IPC: programmatic loading
     // ---------------------------------------------------------
+
     onDataFile: (callback) =>
         ipcRenderer.on("startup-data-file", (_, payload) => callback(payload)),
 
-    emitDataFile: (payload) => {
-        console.log("[PRELOAD] emitDataFile", payload);
-        ipcRenderer.send("startup-data-file", payload);
-    }
-
+    emitDataFile: (payload) =>
+        ipcRenderer.send("startup-data-file", payload),
 });
