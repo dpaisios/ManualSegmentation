@@ -1,0 +1,8 @@
+Things to add:
+- Zoom option on the time bar. We should be able to select a portion of the time bar, so that only that part is displayed. We would need a sort of "full time range tracker", and the current time bar. Selecting a portion of the tracker adjusts the time bar and the XY plot to that portion of the data.
+- Change time bar: make it a 0/1 line plot for Tip.
+- Add a small point tracker to XY plot. Whenever we are hovering the time bar, we can see where we are on the XY plot.
+- Change the time handles, they are horrible.
+- Implement "free draw" XY plot selection.
+- Make the splitting tool a more general toggle - not selection specific.
+- Add "clear all selections".
