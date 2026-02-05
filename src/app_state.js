@@ -43,4 +43,12 @@ export const AppState = {
     // time metadata (for segmented import)
     timeColIndex: null,
     timeColName: null,
+
+    // raw time origin (for segmented import re-alignment)
+    rawTime0: null,
+
+    // stable row identity (export correctness under filtering)
+    rowIdColIndex: null,
+    rowIdColName: null,
+    rowIds: null,
 };

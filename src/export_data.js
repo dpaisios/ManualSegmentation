@@ -3,9 +3,21 @@
 // Pure export logic: ORIGINAL rows + correct ManSegID assignment
 // -------------------------------------------------------------
 
-export function extractRowsForExport(originalRaw, selections, T) {
+export function extractRowsForExport(originalRaw, selections, T, rowIds, rowIdColName) {
     if (!originalRaw?.length) return [];
     if (!selections?.length) return [];
+    if (!T?.length) return [];
+    if (!rowIds?.length) return [];
+    if (!rowIdColName) return [];
+
+    // Build stable lookup: RowID -> raw row
+    const byId = new Map();
+    for (const r of originalRaw) {
+        const id = r?.[rowIdColName];
+        if (id == null) continue;
+        const key = String(id);
+        if (!byId.has(key)) byId.set(key, r);
+    }
 
     const out = [];
 
@@ -20,7 +32,12 @@ export function extractRowsForExport(originalRaw, selections, T) {
 
             if (t >= sel.t0 && t <= sel.t1) {
 
-                const row = { ...originalRaw[i] };
+                const rid = String(rowIds[i]);
+                const rawRow = byId.get(rid);
+                
+                if (!rawRow) break;
+
+                const row = { ...rawRow };
 
                 // assign ID immediately (CORRECT DOMAIN)
                 row.ManSegID = sel.id ?? `#${s + 1}`;

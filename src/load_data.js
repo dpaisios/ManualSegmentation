@@ -23,6 +23,7 @@ import { AppState } from "./app_state.js";
 export let detectedCols = null;
 export let originalRaw = null;          // TRUE original, immutable
 export let X = [], Y = [], T = [], Tip = [], TipSeg = [];
+export let RowIDs = [];
 export let exportPathOverrideGlobal = null;
 
 // -------------------------------------------------------------
@@ -55,7 +56,9 @@ export function loadData(
     }
 
     let data = originalRaw.map(r => ({ ...r }));
-    let colNames = Object.keys(data[0]);
+    // Keep a copy of the ORIGINAL (raw) key order for mapping back into originalRaw
+    const rawColNames = Object.keys(data[0]);
+    let colNames = [...rawColNames];
 
     if (
         colNamesOverride &&
@@ -94,7 +97,34 @@ export function loadData(
         (typeof cols.t === "number") ? cols.t : null;
 
     AppState.timeColName =
-        (typeof cols.t === "number") ? Object.keys(originalRaw[0])[cols.t] : null;
+        (typeof cols.t === "number") ? rawColNames[cols.t] : null;
+
+    // Persist row-id column metadata (required for correct export under filtering)
+    AppState.rowIdColIndex =
+        (typeof cols.Index === "number") ? cols.Index : null;
+
+    AppState.rowIdColName =
+        (typeof cols.Index === "number") ? rawColNames[cols.Index] : null;
+
+    // Row-id key in the *processed data* domain (after optional colNamesOverride).
+    // This is what we must read from 'r' when building RowIDs.
+    const rowIdKeyData =
+        (typeof cols.Index === "number") ? colNames[cols.Index] : null;
+
+    if (!AppState.rowIdColName) {
+        alert(
+            "No stable row ID column detected (Index/eventid). " +
+            "Export cannot be made reliable under filtering without it."
+        );
+        return;
+    }
+
+    if (!rowIdKeyData) {
+        alert(
+            "Internal error: row ID key not resolved in processed data domain."
+        );
+        return;
+    }
 
     // Persist raw time origin (for segmented import re-alignment)
     if (
@@ -126,13 +156,15 @@ export function loadData(
     T.length = 0;
     Tip.length = 0;
     TipSeg.length = 0;
-
+    RowIDs.length = 0;
+    
     for (const r of data) {
         X.push(r.X);
         Y.push(r.Y);
         T.push(r.t);
         Tip.push(r.Tip);
         TipSeg.push(r.Tip_seg);
+        RowIDs.push(String(r[rowIdKeyData]));
     }
 
     AppState.X = X;
@@ -140,6 +172,7 @@ export function loadData(
     AppState.T = T;
     AppState.Tip = Tip;
     AppState.TipSeg = TipSeg;
+    AppState.rowIds = RowIDs;
     AppState.detectedCols = detectedCols;
     AppState.originalRaw = originalRaw;
 }
@@ -155,6 +188,7 @@ export function resetLoaderState() {
     T.length = 0;
     Tip.length = 0;
     TipSeg.length = 0;
+    RowIDs.length = 0;
 
     // IMPORTANT: timeColIndex MUST persist
 }

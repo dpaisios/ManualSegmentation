@@ -32,7 +32,9 @@ export function createExportController({
         const rows = extractRowsForExport(
             AppState.originalRaw,
             AppState.selections,
-            AppState.T
+            AppState.T,
+            AppState.rowIds,
+            AppState.rowIdColName
         );
 
         if (!rows.length) {
