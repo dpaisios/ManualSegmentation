@@ -5,7 +5,9 @@
 import {
     loadData,
     X, Y, T, Tip, TipSeg,
-    exportPathOverrideGlobal
+    exportPathOverrideGlobal,
+    originalRaw,
+    colNamesOverrideGlobal
 } from "./src/load_data.js";
 
 import { AppState } from "./src/app_state.js";
@@ -312,6 +314,8 @@ const settingsController = attachSettingsController({
     settingsOptions,
     hitTestSettings,
     loadData,
+    originalRaw,
+    colNamesOverrideGlobal,
     exportPathOverrideGlobal,
     resetXYSelection: () => xyController.resetSelection(),
     renderers,

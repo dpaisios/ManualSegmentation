@@ -25,6 +25,7 @@ export let originalRaw = null;          // TRUE original, immutable
 export let X = [], Y = [], T = [], Tip = [], TipSeg = [];
 export let RowIDs = [];
 export let exportPathOverrideGlobal = null;
+export let colNamesOverrideGlobal = null;
 
 // -------------------------------------------------------------
 // Main loader / reprocessor
@@ -60,11 +61,20 @@ export function loadData(
     const rawColNames = Object.keys(data[0]);
     let colNames = [...rawColNames];
 
+    // If caller didn't pass an override (e.g. filter toggle), reuse last one.
+    if (colNamesOverride == null && colNamesOverrideGlobal) {
+        colNamesOverride = [...colNamesOverrideGlobal];
+    }
+
+    // If caller passed a valid override, persist it for future reprocessing.
     if (
         colNamesOverride &&
         Array.isArray(colNamesOverride) &&
         colNamesOverride.length === colNames.length
     ) {
+        colNamesOverrideGlobal = [...colNamesOverride];
+
+        // Rename keys using the override (this is your existing loop).
         for (const row of data) {
             for (let i = 0; i < colNames.length; i++) {
                 const oldK = colNames[i];
@@ -73,6 +83,8 @@ export function loadData(
                 delete row[oldK];
             }
         }
+
+        // From here on, the canonical names are the override names.
         colNames = [...colNamesOverride];
     }
 

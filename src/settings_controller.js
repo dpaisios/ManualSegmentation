@@ -49,6 +49,7 @@ export function attachSettingsController({
     hitTestSettings,
     loadData,
     originalRaw,
+    colNamesOverrideGlobal,
     exportPathOverrideGlobal,
 
     // NEW: injected reset hook
@@ -86,7 +87,7 @@ export function attachSettingsController({
             ) {
                 loadData(
                     originalRaw,
-                    null,
+                    colNamesOverrideGlobal,
                     exportPathOverrideGlobal,
                     settingsOptions
                 );
