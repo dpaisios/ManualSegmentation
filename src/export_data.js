@@ -42,6 +42,8 @@ export function extractRowsForExport(originalRaw, selections, T, rowIds, rowIdCo
                 // assign ID immediately (CORRECT DOMAIN)
                 row.ManSegID = sel.id ?? `#${s + 1}`;
 
+                row.Flag = sel.flagged ? 1 : 0;
+
                 out.push(row);
                 break;
             }

@@ -186,6 +186,15 @@ function redrawTimeBar(state) {
         });
 
         placeIcon({
+            id: `timebar-flag-${i}`,
+            svgPath: sel.flagged ? "images/flag_active.svg" : "images/flag.svg",
+            cx: offsetX + cluster.flag.cx,
+            cy: offsetY + cy,
+            size,
+            opacity: sel.bubbleAlpha
+        });
+
+        placeIcon({
             id: `timebar-delete-${i}`,
             svgPath: "images/deletebubble.svg",
             cx: offsetX + cluster.delete.cx,

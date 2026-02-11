@@ -94,7 +94,7 @@ export function computeClusterLayout(ctx, sel, T, W, H) {
     const mid = (x0 + x1) / 2;
 
     // Virtual cluster width: [split][delete][label footprint]
-    const N = 3;
+    const N = 4;
     const virtualW = N * (2 * r) + (N - 1) * CLUSTER_GAP;
     const leftEdge = mid - virtualW / 2;
 
@@ -112,7 +112,7 @@ export function computeClusterLayout(ctx, sel, T, W, H) {
     const boxW = textW + padX * 2;
     const boxH = 2 * r;
 
-    const labelCenterX = centerOfItem(2);
+    const labelCenterX = centerOfItem(3);
     const virtualLeftEdge = labelCenterX - r;
 
     const xLabel = Math.max(
@@ -132,6 +132,12 @@ export function computeClusterLayout(ctx, sel, T, W, H) {
         delete: {
             cx: centerOfItem(1),
             cy: anchorY,
+            r
+        },
+
+        flag: {
+            cx: centerOfItem(2),
+            cy: anchorY, 
             r
         },
 
@@ -183,7 +189,44 @@ export function hitTestClusterDelete(ctx, xClick, yClick, sel, T, W, H) {
     );
 }
 
+export function hitTestClusterFlag(ctx, xClick, yClick, sel, T, W, H) {
+    if (!sel) return false;
+    const cluster = computeClusterLayout(ctx, sel, T, W, H);
+    return hitCircle(
+        xClick, yClick,
+        cluster.flag.cx,
+        cluster.flag.cy,
+        cluster.flag.r
+    );
+}
+
 export function getClusterLabelRect(ctx, sel, T, W, H) {
     const cluster = computeClusterLayout(ctx, sel, T, W, H);
     return { ...cluster.label };
+}
+
+export function getClusterHoverRect(ctx, sel, T, W, H, barY1) {
+    const cluster = computeClusterLayout(ctx, sel, T, W, H);
+
+    // Horizontal span: the full virtual cluster width (includes gaps)
+    const x0 = cluster.virtual.leftEdge;
+    const x1 = cluster.virtual.leftEdge + cluster.virtual.width;
+
+    // Vertical span: include bubbles + label, and extend down to the bar (corridor)
+    const top = Math.min(
+        cluster.split.cy  - cluster.r,
+        cluster.delete.cy - cluster.r,
+        cluster.flag.cy   - cluster.r,
+        cluster.label.y
+    );
+
+    const bottom = Math.max(
+        barY1,
+        cluster.split.cy  + cluster.r,
+        cluster.delete.cy + cluster.r,
+        cluster.flag.cy   + cluster.r,
+        cluster.label.y + cluster.label.h
+    );
+
+    return { x: x0, y: top, w: (x1 - x0), h: (bottom - top) };
 }

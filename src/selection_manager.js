@@ -25,7 +25,8 @@ function makeSelectionObject(t0, t1) {
         t1,
         id: null,
         lockedID: false,
-        bubbleAlpha: 0
+        bubbleAlpha: 0,
+        flagged: false
     };
 }
 
@@ -192,6 +193,7 @@ export function splitSelection(selections, targetSel, tSplit, T) {
 
     // create right
     const right = makeSelectionObject(tSplit, oldT1);
+    right.flagged = !!targetSel.flagged;
 
     if (targetSel.lockedID && targetSel.id != null && targetSel.id !== "") {
 
@@ -263,5 +265,8 @@ export function mergeSelectionsByEnvelope(
         ID.recomputeAutoIDs(next);
     }
 
+    const anyFlagged = overlapping.some(s => !!s.flagged);
+    primary.flagged = anyFlagged;
+    
     return next;
 }

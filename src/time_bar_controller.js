@@ -26,7 +26,9 @@ import { clamp } from "./geometry.js";
 import {
     getClusterLabelRect,
     hitTestClusterSplit,
-    hitTestClusterDelete
+    hitTestClusterDelete,
+    hitTestClusterFlag,
+    getClusterHoverRect
 } from "./time_bar_primitives.js";
 
 export function attachTimeBarController({
@@ -115,6 +117,21 @@ export function attachTimeBarController({
         return { barClickable, leftPad, barWidth, barY0, barY1 };
     }
 
+    // Sticky cluster test: keep current cluster visible as long as pointer
+    // remains inside ANY of its interactive bubble/label hitboxes.
+    function isPointerInAnyClusterBubble(sel, x, y) {
+        if (!sel) return false;
+
+        if (hitTestClusterSplit(ctx, x, y, sel, T, canvas.width, canvas.height)) return true;
+        if (hitTestClusterFlag(ctx,  x, y, sel, T, canvas.width, canvas.height)) return true;
+        if (hitTestClusterDelete(ctx, x, y, sel, T, canvas.width, canvas.height)) return true;
+
+        const r = getClusterLabelRect(ctx, sel, T, canvas.width, canvas.height);
+        if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return true;
+
+        return false;
+    }
+
     // ESC exits split mode (recommended UX)
     window.addEventListener("keydown", e => {
         if (e.key === "Escape" && splitMode) {
@@ -127,7 +144,6 @@ export function attachTimeBarController({
         }
     });
 
-    //
     function computeMergeFillGaps(selections, t0, t1) {
         const a = Math.min(t0, t1);
         const b = Math.max(t0, t1);
@@ -207,7 +223,6 @@ export function attachTimeBarController({
 
                 exitSplitMode();
                 clearDragState();
-                clearHoverState();
 
                 canvas.style.cursor = "default";
                 redrawTimeBar();
@@ -218,7 +233,6 @@ export function attachTimeBarController({
             // CASE 2 — ANY other click → cancel split mode
             exitSplitMode();
             clearDragState();
-            clearHoverState();
 
             canvas.style.cursor = "default";
             redrawTimeBar();
@@ -238,6 +252,9 @@ export function attachTimeBarController({
                 x >= r.x && x <= r.x + r.w &&
                 y >= r.y && y <= r.y + r.h
             ) {
+                deleteTarget = sel;
+                redrawTimeBar();
+
                 labelEditor.start(
                     sel,
                     r,
@@ -262,6 +279,7 @@ export function attachTimeBarController({
                 clearDragState();
                 clearHoverState();
 
+                deleteTarget = sel;
                 canvas.style.cursor = "crosshair";
                 redrawTimeBar();
                 redrawXY();
@@ -281,11 +299,30 @@ export function attachTimeBarController({
             ID.recomputeAutoIDs(next);
 
             clearDragState();
-            clearHoverState();
+            // DO NOT clearHoverState() here: prevents bubble blink
 
             redrawTimeBar();
             redrawXY();
             return;
+        }
+
+        // -------------------------------------------------
+        // 3) Flag bubble (toggle)
+        // -------------------------------------------------
+        for (const sel of selections) {
+            if ((sel.bubbleAlpha ?? 0) <= 0.01) continue;
+
+            if (hitTestClusterFlag(ctx, x, y, sel, T, canvas.width, canvas.height)) {
+                sel.flagged = !sel.flagged;
+
+                // bump version (via app.js setSelections hook)
+                setSelections([...selections]);
+
+                deleteTarget = sel;
+                redrawTimeBar();
+                redrawXY();
+                return;
+            }
         }
 
         clearDragState();
@@ -408,7 +445,6 @@ export function attachTimeBarController({
             if (insideBar && splitTarget) {
                 let t = pixelToTime(x, leftPad, barWidth, tMin, tMax);
 
-                // Clamp split preview strictly to the active selection
                 if (t < splitTarget.t0) t = splitTarget.t0;
                 if (t > splitTarget.t1) t = splitTarget.t1;
 
@@ -431,16 +467,9 @@ export function attachTimeBarController({
             const t = pixelToTime(x, leftPad, barWidth, tMin, tMax);
             mergeT1 = t;
 
-            const gaps = computeMergeFillGaps(
-                selections,
-                mergeT0,
-                mergeT1
-            );
+            const gaps = computeMergeFillGaps(selections, mergeT0, mergeT1);
 
-            tempSelection = {
-                __mergePreview: true,
-                gaps
-            };
+            tempSelection = { __mergePreview: true, gaps };
 
             redrawTimeBar();
             redrawXY();
@@ -453,15 +482,123 @@ export function attachTimeBarController({
         if (!dragging && !draggingStartHandle && !draggingEndHandle) {
 
             hoveredHandle = null;
-            let hoveredSelection = null;
 
+            // -------------------------------------------------
+            // 0) HANDLE HOVER (independent)
+            // -------------------------------------------------
             let bestHandle = null;
             let bestDist   = Infinity;
+
+            // -------------------------------------------------
+            // 1) If pointer is ON the TIME BAR, choose segment by BAR HIT ONLY.
+            //    This ignores cluster width entirely (your requested behavior).
+            // -------------------------------------------------
+            if (y >= barY0 && y <= barY1) {
+
+                let under = null;
+
+                for (const sel of selections) {
+                    const x0 = leftPad + (sel.t0 - tMin) / (tMax - tMin) * barWidth;
+                    const x1 = leftPad + (sel.t1 - tMin) / (tMax - tMin) * barWidth;
+
+                    // handle hover (same as before)
+                    const { side } = getHandleSizes(canvas.height);
+
+                    const leftTipX  = x0 + side;
+                    const rightTipX = x1 - side;
+
+                    const allowLeft  = !(leftTipX > x1 && rawX > x1);
+                    const allowRight = !(rightTipX < x0 && rawX < x0);
+
+                    if (
+                        allowLeft &&
+                        TB.hitTestHandleRect(x, y, x0, "left", barY0, barY1, canvas.height)
+                    ) {
+                        const dist = Math.abs(rawX - x0);
+                        if (dist < bestDist) {
+                            bestDist = dist;
+                            bestHandle = { sel, side: "left" };
+                        }
+                    }
+
+                    if (
+                        allowRight &&
+                        TB.hitTestHandleRect(x, y, x1, "right", barY0, barY1, canvas.height)
+                    ) {
+                        const dist = Math.abs(rawX - x1);
+                        if (dist < bestDist) {
+                            bestDist = dist;
+                            bestHandle = { sel, side: "right" };
+                        }
+                    }
+
+                    // bar hit decides ownership
+                    if (rawX >= x0 && rawX <= x1) {
+                        under = sel;
+                        // selections should not overlap; if they do, keep the first
+                        break;
+                    }
+                }
+
+                if (bestHandle) {
+                    hoveredHandle = bestHandle;
+                    deleteTarget  = bestHandle.sel;
+                    canvas.style.cursor = "grab";
+                    redrawTimeBar();
+                    return;
+                }
+
+                deleteTarget = under;
+                canvas.style.cursor = "default";
+                redrawTimeBar();
+                redrawXY();
+                return;
+            }
+
+            // -------------------------------------------------
+            // 2) Above the bar: STICKY OWNERSHIP
+            //    Keep current cluster visible while pointer stays within:
+            //    - cluster hover rect (includes gaps), OR
+            //    - a vertical corridor aligned with the segment body [x0..x1] down to the bar
+            // -------------------------------------------------
+            if (deleteTarget) {
+                // segment body x-range
+                const bx0 = leftPad + (deleteTarget.t0 - tMin) / (tMax - tMin) * barWidth;
+                const bx1 = leftPad + (deleteTarget.t1 - tMin) / (tMax - tMin) * barWidth;
+
+                // cluster hover rect (you already added getClusterHoverRect)
+                const zr = getClusterHoverRect(ctx, deleteTarget, T, canvas.width, canvas.height, barY1);
+
+                const inClusterRect =
+                    rawX >= zr.x && rawX <= zr.x + zr.w &&
+                    y    >= zr.y && y    <= zr.y + zr.h;
+
+                // corridor: allow moving from segment to its cluster even if cluster is narrow
+                const inCorridor =
+                    rawX >= bx0 && rawX <= bx1 &&
+                    y    >= zr.y && y    <= barY1;
+
+                if (inClusterRect || inCorridor) {
+                    canvas.style.cursor = "default";
+                    redrawTimeBar();
+                    redrawXY();
+                    return;
+                }
+            }
+
+            // -------------------------------------------------
+            // 3) Resolve hovered selection ABOVE bar:
+            //    bubbles(4) > label(3) > hoverRect(2) > body(1)
+            // -------------------------------------------------
+            let bestSel   = null;
+            let bestScore = -Infinity;
+            let bestDist2 = Infinity;
 
             for (const sel of selections) {
                 const x0 = leftPad + (sel.t0 - tMin) / (tMax - tMin) * barWidth;
                 const x1 = leftPad + (sel.t1 - tMin) / (tMax - tMin) * barWidth;
 
+                // handle hover (same as before)
                 const { side } = getHandleSizes(canvas.height);
 
                 const leftTipX  = x0 + side;
@@ -492,30 +629,64 @@ export function attachTimeBarController({
                     }
                 }
 
-                if (y >= 1 && y <= barY1 && rawX >= x0 && rawX <= x1) {
-                    hoveredSelection = sel;
-                }
+                let score = -Infinity;
+                let dist2 = Infinity;
 
-                if (!hoveredSelection) {
-                    const r = getClusterLabelRect(ctx, sel, T, canvas.width, canvas.height);
+                // bubbles
+                if (hitTestClusterSplit(ctx, rawX, y, sel, T, canvas.width, canvas.height) ||
+                    hitTestClusterFlag(ctx,  rawX, y, sel, T, canvas.width, canvas.height) ||
+                    hitTestClusterDelete(ctx, rawX, y, sel, T, canvas.width, canvas.height)) {
+
+                    score = 4;
+                    const cx = (x0 + x1) / 2;
+                    const dx = rawX - cx;
+                    const dy = y - (barY0 - 20);
+                    dist2 = dx*dx + dy*dy;
+
+                } else {
+                    // label
+                    const lr = getClusterLabelRect(ctx, sel, T, canvas.width, canvas.height);
                     if (
-                        rawX >= r.x && rawX <= r.x + r.w &&
-                        y    >= r.y && y    <= r.y + r.h
+                        rawX >= lr.x && rawX <= lr.x + lr.w &&
+                        y    >= lr.y && y    <= lr.y + lr.h
                     ) {
-                        hoveredSelection = sel;
+                        score = 3;
+                        const cx = lr.x + lr.w / 2;
+                        const cy = lr.y + lr.h / 2;
+                        const dx = rawX - cx;
+                        const dy = y - cy;
+                        dist2 = dx*dx + dy*dy;
+
+                    } else {
+                        // hover rect (includes gaps)
+                        const zr = getClusterHoverRect(ctx, sel, T, canvas.width, canvas.height, barY1);
+                        if (
+                            rawX >= zr.x && rawX <= zr.x + zr.w &&
+                            y    >= zr.y && y    <= zr.y + zr.h
+                        ) {
+                            score = 2;
+                            const cx = zr.x + zr.w / 2;
+                            const cy = zr.y + zr.h / 2;
+                            const dx = rawX - cx;
+                            const dy = y - cy;
+                            dist2 = dx*dx + dy*dy;
+                        } else {
+                            // fallback body (above bar): allow selecting cluster even when cursor is above bar
+                            if (rawX >= x0 && rawX <= x1) {
+                                score = 1;
+                                const cx = (x0 + x1) / 2;
+                                const dx = rawX - cx;
+                                const dy = y - barY0;
+                                dist2 = dx*dx + dy*dy;
+                            }
+                        }
                     }
                 }
 
-                if (!hoveredSelection) {
-                    if (hitTestClusterSplit(ctx, rawX, y, sel, T, canvas.width, canvas.height)) {
-                        hoveredSelection = sel;
-                    }
-                }
-
-                if (!hoveredSelection) {
-                    if (hitTestClusterDelete(ctx, rawX, y, sel, T, canvas.width, canvas.height)) {
-                        hoveredSelection = sel;
-                    }
+                if (score > bestScore || (score === bestScore && dist2 < bestDist2)) {
+                    bestScore = score;
+                    bestDist2 = dist2;
+                    bestSel   = sel;
                 }
             }
 
@@ -527,7 +698,7 @@ export function attachTimeBarController({
                 return;
             }
 
-            deleteTarget = hoveredSelection;
+            deleteTarget = bestSel;
             canvas.style.cursor = "default";
             redrawTimeBar();
             redrawXY();
@@ -545,11 +716,7 @@ export function attachTimeBarController({
                 pixelToTime(x, leftPad, barWidth, tMin, tMax);
 
             draggingStartHandle.t0 =
-                Select.clampLeftHandle(
-                    selections,
-                    draggingStartHandle,
-                    proposedT0
-                );
+                Select.clampLeftHandle(selections, draggingStartHandle, proposedT0);
 
             redrawTimeBar();
             redrawXY();
@@ -567,11 +734,7 @@ export function attachTimeBarController({
                 pixelToTime(x, leftPad, barWidth, tMin, tMax);
 
             draggingEndHandle.t1 =
-                Select.clampRightHandle(
-                    selections,
-                    draggingEndHandle,
-                    proposedT1
-                );
+                Select.clampRightHandle(selections, draggingEndHandle, proposedT1);
 
             redrawTimeBar();
             redrawXY();
@@ -592,11 +755,7 @@ export function attachTimeBarController({
                 pixelToTime(x, leftPad, barWidth, tMin, tMax);
 
             tCurr =
-                Select.clampNewSelectionTime(
-                    selections,
-                    tStart,
-                    tCurr
-                );
+                Select.clampNewSelectionTime(selections, tStart, tCurr);
 
             tempSelection = {
                 t0: Math.min(tStart, tCurr),
@@ -612,7 +771,7 @@ export function attachTimeBarController({
     // ---------------------------------------------------------
     // MOUSEUP
     // ---------------------------------------------------------
-    canvas.addEventListener("mouseup", () => {
+    canvas.addEventListener("mouseup", e => {
         if (!haveData()) return;
 
         const selections = getSelections() || [];
@@ -668,7 +827,6 @@ export function attachTimeBarController({
         // 4) Cleanup
         // -------------------------------------------------
         clearDragState();
-        clearHoverState();
 
         canvas.style.cursor = "default";
         redrawTimeBar();
@@ -688,6 +846,7 @@ export function attachTimeBarController({
             deleteTarget  = editingSel;
             canvas.style.cursor = "default";
             redrawTimeBar();
+            redrawXY();          // <-- ADD THIS
             return;
         }
 
@@ -702,6 +861,7 @@ export function attachTimeBarController({
         clearHoverState();
         canvas.style.cursor = "default";
         redrawTimeBar();
+        redrawXY();              // <-- ADD THIS
     });
 
     // ---------------------------------------------------------
