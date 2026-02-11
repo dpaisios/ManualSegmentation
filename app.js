@@ -35,7 +35,7 @@ import {
 } from "./src/export_data.js";
 
 import * as ID from "./src/selection_ids.js";
-import { createLabelEditor } from "./src/label_editor.js";
+import { createLabelEditor, isEditingSelection} from "./src/label_editor.js";
 import { attachTimeBarController } from "./src/time_bar_controller.js";
 import { placeIcon, clearOverlay, placeLabel } from "./src/icons_overlay.js";
 import { computeClusterLayout } from "./src/time_bar_primitives.js";
@@ -194,7 +194,7 @@ function redrawTimeBar(state) {
             opacity: sel.bubbleAlpha
         });
 
-        if (sel.id != null && sel.id !== "") {
+        if (sel.id != null && sel.id !== "" && !isEditingSelection(sel)) {
             placeLabel({
                 id: `timebar-label-${i}`,
                 x: offsetX + cluster.label.x,
