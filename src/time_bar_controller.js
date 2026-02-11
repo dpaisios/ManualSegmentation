@@ -28,8 +28,15 @@ import {
     hitTestClusterSplit,
     hitTestClusterDelete,
     hitTestClusterFlag,
-    getClusterHoverRect
+    getClusterHoverRect,
+    hitTestClusterComment,
+    getClusterCommentRect
 } from "./time_bar_primitives.js";
+
+import {
+    anyEditingCommentIn,
+    getEditingCommentSelection
+} from "./comment_editor.js";
 
 export function attachTimeBarController({
     canvas,
@@ -43,6 +50,8 @@ export function attachTimeBarController({
 
     // label editing
     labelEditor,
+
+    commentEditor,
 
     // redraw hooks
     redrawTimeBar,
@@ -64,6 +73,8 @@ export function attachTimeBarController({
 
     let hoveredHandle = null;   // { sel, side } | null
     let deleteTarget  = null;   // sel | null
+
+    let hoveredCommentTarget = null;
 
     // Split mode
     let splitMode    = false;
@@ -94,6 +105,7 @@ export function attachTimeBarController({
     function clearHoverState() {
         hoveredHandle = null;
         deleteTarget  = null;
+        hoveredCommentTarget = null;
     }
 
     function exitSplitMode() {
@@ -115,21 +127,6 @@ export function attachTimeBarController({
             y >= barY0 && y <= barY1;
 
         return { barClickable, leftPad, barWidth, barY0, barY1 };
-    }
-
-    // Sticky cluster test: keep current cluster visible as long as pointer
-    // remains inside ANY of its interactive bubble/label hitboxes.
-    function isPointerInAnyClusterBubble(sel, x, y) {
-        if (!sel) return false;
-
-        if (hitTestClusterSplit(ctx, x, y, sel, T, canvas.width, canvas.height)) return true;
-        if (hitTestClusterFlag(ctx,  x, y, sel, T, canvas.width, canvas.height)) return true;
-        if (hitTestClusterDelete(ctx, x, y, sel, T, canvas.width, canvas.height)) return true;
-
-        const r = getClusterLabelRect(ctx, sel, T, canvas.width, canvas.height);
-        if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return true;
-
-        return false;
     }
 
     // ESC exits split mode (recommended UX)
@@ -181,7 +178,7 @@ export function attachTimeBarController({
         const selections = getSelections() || [];
 
         // Block all interactions while editing a label
-        if (anyEditingSelectionIn(selections)) return;
+        if (anyEditingSelectionIn(selections) || anyEditingCommentIn(selections)) return;
 
         const x = e.offsetX;
         const y = e.offsetY;
@@ -241,7 +238,7 @@ export function attachTimeBarController({
         }
 
         // -------------------------------------------------
-        // 0) Click on label to edit?
+        // Click on label to edit?
         // -------------------------------------------------
         for (const sel of selections) {
             if ((sel.bubbleAlpha ?? 0) <= 0.01) continue;
@@ -266,7 +263,7 @@ export function attachTimeBarController({
         }
 
         // -------------------------------------------------
-        // 1) Split bubble click? (enter split mode)
+        // Split bubble click? (enter split mode)
         // -------------------------------------------------
         for (const sel of selections) {
             if ((sel.bubbleAlpha ?? 0) <= 0.01) continue;
@@ -288,7 +285,39 @@ export function attachTimeBarController({
         }
 
         // -------------------------------------------------
-        // 2) Delete bubble click?
+        // Comment bubble click? (toggle editor)
+        // -------------------------------------------------
+        for (const sel of selections) {
+            if ((sel.bubbleAlpha ?? 0) <= 0.01) continue;
+
+            if (hitTestClusterComment(ctx, x, y, sel, T, canvas.width, canvas.height)) {
+
+                // if already editing this selection comment, commit by toggling
+                if (commentEditor?.toggleCommitIfEditingSame?.(sel)) {
+                    redrawTimeBar();
+                    redrawXY();
+                    return;
+                }
+
+                // placeholder: use new helper getClusterCommentRect(...)
+                const r = getClusterCommentRect(ctx, sel, T, canvas.width, canvas.height);
+
+                deleteTarget = sel;
+                redrawTimeBar();
+
+                commentEditor.start(
+                    sel,
+                    r,
+                    canvas.getBoundingClientRect(),
+                    String(sel.comment ?? "")
+                );
+
+                return;
+            }
+        }
+
+        // -------------------------------------------------
+        // Delete bubble click?
         // -------------------------------------------------
         if (
             deleteTarget &&
@@ -307,7 +336,7 @@ export function attachTimeBarController({
         }
 
         // -------------------------------------------------
-        // 3) Flag bubble (toggle)
+        // Flag bubble (toggle)
         // -------------------------------------------------
         for (const sel of selections) {
             if ((sel.bubbleAlpha ?? 0) <= 0.01) continue;
@@ -328,7 +357,7 @@ export function attachTimeBarController({
         clearDragState();
 
         // -------------------------------------------------
-        // 3) Handle drags?
+        // Handle drags?
         // -------------------------------------------------
         for (const sel of selections) {
             const x0 = leftPad + (sel.t0 - tMin) / (tMax - tMin) * barWidth;
@@ -350,7 +379,7 @@ export function attachTimeBarController({
         }
 
         // -------------------------------------------------
-        // 3.5) Merge drag: click inside selection body
+        // Merge drag: click inside selection body
         // -------------------------------------------------
         for (const sel of selections) {
             const tClick = pixelToTime(
@@ -382,7 +411,7 @@ export function attachTimeBarController({
         }
 
         // -------------------------------------------------
-        // 4) New selection creation
+        // New selection creation
         // -------------------------------------------------
         if (
             barClickable &&
@@ -424,7 +453,7 @@ export function attachTimeBarController({
         const x    = clamp(rawX, leftPad, leftPad + barWidth);
         const y    = e.offsetY;
 
-        const editingSel = getEditingSelection(selections);
+        const editingSel = getEditingSelection(selections) || getEditingCommentSelection(selections);
 
         if (editingSel) {
             hoveredHandle = null;
@@ -482,6 +511,7 @@ export function attachTimeBarController({
         if (!dragging && !draggingStartHandle && !draggingEndHandle) {
 
             hoveredHandle = null;
+            hoveredCommentTarget = null;
 
             // -------------------------------------------------
             // 0) HANDLE HOVER (independent)
@@ -579,6 +609,12 @@ export function attachTimeBarController({
                     y    >= zr.y && y    <= barY1;
 
                 if (inClusterRect || inCorridor) {
+
+                    // NEW: detect comment bubble hover while we keep sticky ownership
+                    if (hitTestClusterComment(ctx, rawX, y, deleteTarget, T, canvas.width, canvas.height)) {
+                        hoveredCommentTarget = deleteTarget;
+                    }
+
                     canvas.style.cursor = "default";
                     redrawTimeBar();
                     redrawXY();
@@ -633,10 +669,15 @@ export function attachTimeBarController({
                 let dist2 = Infinity;
 
                 // bubbles
-                if (hitTestClusterSplit(ctx, rawX, y, sel, T, canvas.width, canvas.height) ||
+                if (    
+                    hitTestClusterSplit(ctx, rawX, y, sel, T, canvas.width, canvas.height) ||
                     hitTestClusterFlag(ctx,  rawX, y, sel, T, canvas.width, canvas.height) ||
-                    hitTestClusterDelete(ctx, rawX, y, sel, T, canvas.width, canvas.height)) {
-
+                    hitTestClusterDelete(ctx, rawX, y, sel, T, canvas.width, canvas.height) ||
+                    hitTestClusterComment(ctx, rawX, y, sel, T, canvas.width, canvas.height)
+                ) {
+                    if (hitTestClusterComment(ctx, rawX, y, sel, T, canvas.width, canvas.height)) {
+                        hoveredCommentTarget = sel;
+                    }
                     score = 4;
                     const cx = (x0 + x1) / 2;
                     const dx = rawX - cx;
@@ -839,7 +880,8 @@ export function attachTimeBarController({
     canvas.addEventListener("mouseleave", () => {
         const selections = getSelections() || [];
 
-        const editingSel = getEditingSelection(selections);
+        const editingSel =
+            getEditingSelection(selections) || getEditingCommentSelection(selections);
 
         if (editingSel) {
             hoveredHandle = null;
@@ -872,6 +914,7 @@ export function attachTimeBarController({
             get hoveredHandle() { return hoveredHandle; },
             get deleteTarget()  { return deleteTarget; },
             get tempSelection() { return tempSelection; },
+            get hoveredCommentTarget() { return hoveredCommentTarget; },
 
             get mergePreview() {
                 if (!draggingMerge || mergeT0 == null || mergeT1 == null) {

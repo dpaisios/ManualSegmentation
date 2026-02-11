@@ -98,6 +98,8 @@ function ensureLabel(id) {
     el.style.justifyContent = "center";
     el.style.boxSizing = "border-box";
 
+    el.style.whiteSpace = "pre-wrap";
+    
     overlay.appendChild(el);
     return el;
 }

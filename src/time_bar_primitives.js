@@ -94,7 +94,7 @@ export function computeClusterLayout(ctx, sel, T, W, H) {
     const mid = (x0 + x1) / 2;
 
     // Virtual cluster width: [split][delete][label footprint]
-    const N = 4;
+    const N = 5;
     const virtualW = N * (2 * r) + (N - 1) * CLUSTER_GAP;
     const leftEdge = mid - virtualW / 2;
 
@@ -112,7 +112,7 @@ export function computeClusterLayout(ctx, sel, T, W, H) {
     const boxW = textW + padX * 2;
     const boxH = 2 * r;
 
-    const labelCenterX = centerOfItem(3);
+    const labelCenterX = centerOfItem(4);
     const virtualLeftEdge = labelCenterX - r;
 
     const xLabel = Math.max(
@@ -138,6 +138,12 @@ export function computeClusterLayout(ctx, sel, T, W, H) {
         flag: {
             cx: centerOfItem(2),
             cy: anchorY, 
+            r
+        },
+
+        comment: {
+            cx: centerOfItem(3),
+            cy: anchorY,
             r
         },
 
@@ -200,6 +206,18 @@ export function hitTestClusterFlag(ctx, xClick, yClick, sel, T, W, H) {
     );
 }
 
+export function hitTestClusterComment(ctx, xClick, yClick, sel, T, W, H) {
+    if (!sel) return false;
+    const cluster = computeClusterLayout(ctx, sel, T, W, H);
+    return hitCircle(xClick, yClick, cluster.comment.cx, cluster.comment.cy, cluster.comment.r);
+}
+
+export function getClusterCommentRect(ctx, sel, T, W, H) {
+    const cluster = computeClusterLayout(ctx, sel, T, W, H);
+    const r = cluster.comment.r;
+    return { x: cluster.comment.cx, y: cluster.comment.cy, w: 2*r, h: 2*r };
+}
+
 export function getClusterLabelRect(ctx, sel, T, W, H) {
     const cluster = computeClusterLayout(ctx, sel, T, W, H);
     return { ...cluster.label };
@@ -214,9 +232,10 @@ export function getClusterHoverRect(ctx, sel, T, W, H, barY1) {
 
     // Vertical span: include bubbles + label, and extend down to the bar (corridor)
     const top = Math.min(
-        cluster.split.cy  - cluster.r,
-        cluster.delete.cy - cluster.r,
-        cluster.flag.cy   - cluster.r,
+        cluster.split.cy    - cluster.r,
+        cluster.delete.cy   - cluster.r,
+        cluster.flag.cy     - cluster.r,
+        cluster.comment.cy  - cluster.r,
         cluster.label.y
     );
 

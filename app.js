@@ -42,6 +42,8 @@ import { computeClusterLayout } from "./src/time_bar_primitives.js";
 
 import { createExportSuccessAnimator } from "./src/settings_controller.js";
 
+import { createCommentEditor, isEditingComment } from "./src/comment_editor.js";
+
 // -------------------------------------------------------------
 // Canvases
 // -------------------------------------------------------------
@@ -156,6 +158,7 @@ function redrawTimeBar(state) {
 
     clearOverlay("timebar-");
     clearOverlay("timebar-label-");
+    clearOverlay("timebar-commenttip-");
 
     const rect = timeCanvas.getBoundingClientRect();
     const offsetX = rect.left + window.scrollX;
@@ -202,6 +205,56 @@ function redrawTimeBar(state) {
             size,
             opacity: sel.bubbleAlpha
         });
+
+        placeIcon({
+            id: `timebar-comment-${i}`,
+            svgPath: (sel.comment != null && String(sel.comment).trim() !== "")
+                ? "images/comment_active.svg"
+                : "images/comment.svg",
+            cx: offsetX + cluster.comment.cx,
+            cy: offsetY + cy,
+            size,
+            opacity: sel.bubbleAlpha
+        });
+
+        // Hover tooltip: only when NOT editing and selection is the active hovered one
+        if (timeBarController?.state?.hoveredCommentTarget === sel && !isEditingComment(sel)) {
+            const c = String(sel.comment ?? "").trim();
+            if (c) {
+                timeCtx.save();
+                timeCtx.font = "12px sans-serif";
+
+                const lines = c.split("\n");
+
+                // Measure the widest line in pixels
+                let maxLineW = 0;
+                for (const line of lines) {
+                    const w = timeCtx.measureText(line.length ? line : " ").width;
+                    if (w > maxLineW) maxLineW = w;
+                }
+
+                const padX = 10;
+                const padY = 6;
+
+                // Tooltip width follows text width (still clamped for sanity)
+                const tipW = Math.min(420, Math.max(20, Math.ceil(maxLineW + padX * 2)));
+
+                // Height follows line count
+                const tipH = Math.max(24, lines.length * 16 + padY * 2);
+
+                timeCtx.restore();
+
+                placeLabel({
+                    id: `timebar-commenttip-${i}`,
+                    x: offsetX + cluster.comment.cx - tipW / 2,
+                    y: offsetY + cluster.comment.cy - cluster.comment.r - tipH - 6,
+                    w: tipW,
+                    h: tipH,
+                    text: c,
+                    opacity: sel.bubbleAlpha
+                });
+            }
+        }
 
         if (sel.id != null && sel.id !== "" && !isEditingSelection(sel)) {
             placeLabel({
@@ -275,6 +328,25 @@ const labelEditor = createLabelEditor({
     onCancel: () => renderers.redrawTimeBar()
 });
 
+// -------------------------------------------------------------
+// Comment editor
+// -------------------------------------------------------------
+const commentEditor = createCommentEditor({
+    container: document.getElementById("appContainer"),
+    onCommit: (sel, value) => {
+        const v = String(value ?? "").trimEnd(); // preserve internal newlines, trim only tail
+        const prev = String(sel.comment ?? "");
+
+        // Save if changed (including empty -> empty no-op)
+        if (v !== prev) {
+            sel.comment = v;
+            AppState.selectionsVersion++;
+        }
+
+        renderers.redrawTimeBar();
+    },
+    onCancel: () => renderers.redrawTimeBar()
+});
 
 // -------------------------------------------------------------
 // Controllers
@@ -290,6 +362,7 @@ const timeBarController = attachTimeBarController({
     T,
     Tip,
     labelEditor,
+    commentEditor,
     redrawTimeBar: () => renderers.redrawTimeBar(),
     redrawXY: () => renderers.redrawXY()
 });
