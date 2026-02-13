@@ -37,6 +37,32 @@ function findCol(colNames, candidates) {
 }
 
 // -------------------------------------------------------------
+// Filter rows with negative values ONLY on specified found keys.
+// Runs only when ALL requested keys are known.
+// keys example: ["X","Y","Z"] or ["X","Y","Z","t","P"]
+// -------------------------------------------------------------
+function filterNegativeOnFoundCols(data, found, colNames, keys) {
+    const names = [];
+    for (const k of keys) {
+        const ix = found[k];
+        if (ix == null || ix === -1) return data;
+        const name = colNames[ix];
+        if (name == null) return data;
+        names.push(name);
+    }
+
+    const negRows = new Set();
+    for (const name of names) {
+        for (let i = 0; i < data.length; i++) {
+            const v = data[i][name];
+            if (typeof v === "number" && v < 0) negRows.add(i);
+        }
+    }
+
+    return negRows.size ? data.filter((_, i) => !negRows.has(i)) : data;
+}
+
+// -------------------------------------------------------------
 // MAIN: automatic detection logic
 // This is *exactly* the logic from your current loadData()
 // but turned into a pure function.
@@ -61,7 +87,7 @@ export function detectColumns(data, colNames) {
 
     const dataCol = [...Array(nCols).keys()];
 
-    // ranges
+    // ranges (kept for parity with original logic; not used by filtering anymore)
     const colRanges = colNames.map(name => {
         const vals = data.map(r => r[name]);
         return {
@@ -72,7 +98,7 @@ export function detectColumns(data, colNames) {
 
     const missing =
         [X_col, Y_col, Z_col, t_col, P_col, idx_col]
-        .some(v => v === null || v === -1);
+            .some(v => v === null || v === -1);
 
     // result holder
     const found = {
@@ -84,31 +110,25 @@ export function detectColumns(data, colNames) {
         Index: idx_col
     };
 
+    // ---------------------------------------------------------
+    // INTERMEDIARY STEP (your requirement):
+    // If X/Y/Z are already found by NAME, filter on X/Y/Z NOW,
+    // even if other columns are missing. Then continue heuristics.
+    // ---------------------------------------------------------
+    if (found.X != null && found.Y != null && found.Z != null) {
+        data = filterNegativeOnFoundCols(data, found, colNames, ["X", "Y", "Z"]);
+    }
+
     if (!missing) {
-        // fully detected by name, return directly
+        // fully detected by name -> filter on X/Y/Z/t/P and return
+        data = filterNegativeOnFoundCols(data, found, colNames, ["X", "Y", "Z", "t", "P"]);
         return {
             detectedCols: found,
             processedData: data
         };
     }
 
-    // ---------------------------------------------------------
-    // NEGATIVE-VALUE FILTER (exact logic)
-    // ---------------------------------------------------------
-    let negRows = new Set();
-    for (let j = 0; j < nCols; j++) {
-        if (colRanges[j].min < 0) {
-            const name = colNames[j];
-            for (let i = 0; i < data.length; i++) {
-                if (data[i][name] < 0) negRows.add(i);
-            }
-        }
-    }
-    if (negRows.size) {
-        data = data.filter((_, i) => !negRows.has(i));
-    }
-
-    // recompute ranges
+    // recompute ranges (after possible XYZ filter)
     const colRanges2 = colNames.map(name => {
         const vals = data.map(r => r[name]);
         return {
@@ -186,7 +206,7 @@ export function detectColumns(data, colNames) {
     }
     const TipVec = data.map(r => r.Tip);
     const TipSeg = rleidJS(TipVec);
-    TipSeg.forEach((ts,i) => data[i].Tip_seg = ts);
+    TipSeg.forEach((ts,i) => { if (data[i]) data[i].Tip_seg = ts; });
 
     const data_tip = data.filter(r => r.Tip === 1);
     const tipSegCounts = {};
@@ -208,7 +228,7 @@ export function detectColumns(data, colNames) {
         }
     }
 
-    // ---------------- AUTO X/Y ----------------------
+   // ---------------- AUTO X/Y ----------------------
     if (found.X === null || found.Y === null) {
 
         const rem = dataCol.filter(j => !Object.values(found).includes(j));
@@ -235,14 +255,14 @@ export function detectColumns(data, colNames) {
         const thr = segLens.length > 3 ? median(segLens) : Math.min(...segLens);
 
         const longSegs = Object.entries(tipSegCounts)
-            .filter(([id,len]) => len > thr)
+            .filter(([id, len]) => len > thr)
             .map(([id]) => Number(id));
 
         if (XY_candidates && longSegs.length) {
             const tName = colNames[found.t];
             const [c1, c2] = XY_candidates;
-            const xName = colNames[c1];
-            const yName = colNames[c2];
+            const xName = colNames[c1]; // candidate c1
+            const yName = colNames[c2]; // candidate c2
 
             const slopes1 = [];
             const slopes2 = [];
@@ -250,17 +270,20 @@ export function detectColumns(data, colNames) {
             for (let segID of longSegs) {
                 const segData = data_tip.filter(r => r.Tip_seg === segID);
                 const tVals = segData.map(r => r[tName]);
-                const xVals = segData.map(r => r[xName]);
-                const yVals = segData.map(r => r[yName]);
+                const v1    = segData.map(r => r[xName]);
+                const v2    = segData.map(r => r[yName]);
 
-                slopes1.push(linSlope(tVals, xVals));
-                slopes2.push(linSlope(tVals, yVals));
+                const s1 = linSlope(tVals, v1);
+                const s2 = linSlope(tVals, v2);
+
+                if (Number.isFinite(s1)) slopes1.push(s1);
+                if (Number.isFinite(s2)) slopes2.push(s2);
             }
 
-            const cnt1 = slopes1.filter(s => s > 0).length;
-            const cnt2 = slopes2.filter(s => s > 0).length;
+            const med1 = slopes1.length ? Math.abs(median(slopes1)) : -Infinity;
+            const med2 = slopes2.length ? Math.abs(median(slopes2)) : -Infinity;
 
-            if (cnt1 >= cnt2) {
+            if (med1 >= med2) {
                 found.X = c1;
                 found.Y = c2;
             } else {
@@ -269,6 +292,9 @@ export function detectColumns(data, colNames) {
             }
         }
     }
+
+    // Final filter: once X/Y/Z/t/P are known (by name or heuristics), filter on them.
+    data = filterNegativeOnFoundCols(data, found, colNames, ["X", "Y", "Z", "t", "P"]);
 
     // return mapping + modified data (Tip,TipSeg attached)
     return {
