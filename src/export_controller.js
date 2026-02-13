@@ -24,17 +24,32 @@ export function createExportController({
             return false;
         }
 
+        // -------------------------------------------------
+        // NEW (rowID strictness): export must be keyed on ManSeg_rowID
+        // -------------------------------------------------
+        if (!AppState.rowIds || !AppState.rowIds.length) {
+            alert("No ManSeg_rowID vector loaded.");
+            return false;
+        }
+        if (AppState.rowIds.length !== AppState.T.length) {
+            alert("Internal error: ManSeg_rowID length does not match time vector length.");
+            return false;
+        }
+
         if (!AppState.selections || AppState.selections.length === 0) {
             alert("No segments selected.");
             return false;
         }
+
+        // NEW (defensive default)
+        const rowIdColName = AppState.rowIdColName || "ManSeg_rowID";
 
         const rows = extractRowsForExport(
             AppState.originalRaw,
             AppState.selections,
             AppState.T,
             AppState.rowIds,
-            AppState.rowIdColName
+            rowIdColName
         );
 
         if (!rows.length) {

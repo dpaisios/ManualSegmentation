@@ -3,6 +3,8 @@
 // Folder-session export discovery (disk -> AppState.exportTracker)
 // -------------------------------------------------------------
 
+const ROWID_KEY = "ManSeg_rowID";
+
 function baseNameNoExt(fileName) {
     return String(fileName).replace(/\.[^.]+$/, "");
 }
@@ -27,6 +29,18 @@ function countUniqueManSegID(parsed) {
     }
 
     return set.size;
+}
+
+// NEW (rowID relevance): whether export contains stable row identity
+function exportHasRowID(parsed) {
+    if (!Array.isArray(parsed) || parsed.length === 0) return false;
+
+    for (const row of parsed) {
+        if (!row || typeof row !== "object") continue;
+        const v = row[ROWID_KEY];
+        if (v != null && String(v).trim() !== "") return true;
+    }
+    return false;
 }
 
 // -------------------------------------------------------------
@@ -77,6 +91,7 @@ export async function scanExportsForFolderSession({
             const parsed = JSON.parse(txt);
 
             const exportCount = countUniqueManSegID(parsed);
+            const hasRowID = exportHasRowID(parsed);
 
             let exportedAt = Date.now();
             try {
@@ -89,7 +104,10 @@ export async function scanExportsForFolderSession({
             nextTracker[dataPath] = {
                 exportCount,
                 exportedAt,
-                exportPath
+                exportPath,
+
+                // NEW: indicates whether re-import can be rowID-based
+                hasRowID
             };
         } catch {
             // ignore malformed exports

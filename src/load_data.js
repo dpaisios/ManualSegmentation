@@ -28,6 +28,11 @@ export let exportPathOverrideGlobal = null;
 export let colNamesOverrideGlobal = null;
 
 // -------------------------------------------------------------
+// Internal stable row identity key (NEW policy)
+// -------------------------------------------------------------
+const ROWID_KEY = "ManSeg_rowID";
+
+// -------------------------------------------------------------
 // Main loader / reprocessor
 // -------------------------------------------------------------
 export function loadData(
@@ -47,8 +52,24 @@ export function loadData(
         exportPathOverrideGlobal = exportPathOverride;
     }
 
+    // ---------------------------------------------------------
+    // FIRST LOAD ONLY: freeze immutable original + assign ManSeg_rowID
+    // ---------------------------------------------------------
     if (!originalRaw && raw && raw.length) {
-        originalRaw = raw.map(r => ({ ...r }));
+        originalRaw = raw.map((r, i) => {
+            const o = { ...r };
+
+            // If already present (e.g. re-loading an exported file), keep it.
+            // Otherwise generate stable IDs from original row order.
+            const existing = o?.[ROWID_KEY];
+            if (existing == null || String(existing).trim() === "") {
+                o[ROWID_KEY] = String(i + 1);
+            } else {
+                o[ROWID_KEY] = String(existing);
+            }
+
+            return o;
+        });
     }
 
     if (!originalRaw || !originalRaw.length) {
@@ -57,8 +78,12 @@ export function loadData(
     }
 
     let data = originalRaw.map(r => ({ ...r }));
-    // Keep a copy of the ORIGINAL (raw) key order for mapping back into originalRaw
-    const rawColNames = Object.keys(data[0]);
+
+    // Keep a copy of the ORIGINAL (raw) key order for mapping time column name.
+    // IMPORTANT: exclude ManSeg_rowID from detection/renaming domains.
+    const rawColNamesAll = Object.keys(data[0]);
+    const rawColNames = rawColNamesAll.filter(k => k !== ROWID_KEY);
+
     let colNames = [...rawColNames];
 
     // If caller didn't pass an override (e.g. filter toggle), reuse last one.
@@ -74,7 +99,7 @@ export function loadData(
     ) {
         colNamesOverrideGlobal = [...colNamesOverride];
 
-        // Rename keys using the override (this is your existing loop).
+        // Rename keys using the override (EXCLUDING ManSeg_rowID).
         for (const row of data) {
             for (let i = 0; i < colNames.length; i++) {
                 const oldK = colNames[i];
@@ -88,8 +113,9 @@ export function loadData(
         colNames = [...colNamesOverride];
     }
 
+    // Numeric-cast ONLY the data columns (exclude ManSeg_rowID)
     data = data.map(r => {
-        const o = {};
+        const o = { ...r }; // preserves ManSeg_rowID untouched
         for (const k of colNames) {
             o[k] = (typeof r[k] === "number") ? r[k] : Number(r[k]);
         }
@@ -111,32 +137,11 @@ export function loadData(
     AppState.timeColName =
         (typeof cols.t === "number") ? rawColNames[cols.t] : null;
 
-    // Persist row-id column metadata (required for correct export under filtering)
-    AppState.rowIdColIndex =
-        (typeof cols.Index === "number") ? cols.Index : null;
-
-    AppState.rowIdColName =
-        (typeof cols.Index === "number") ? rawColNames[cols.Index] : null;
-
-    // Row-id key in the *processed data* domain (after optional colNamesOverride).
-    // This is what we must read from 'r' when building RowIDs.
-    const rowIdKeyData =
-        (typeof cols.Index === "number") ? colNames[cols.Index] : null;
-
-    if (!AppState.rowIdColName) {
-        alert(
-            "No stable row ID column detected (Index/eventid). " +
-            "Export cannot be made reliable under filtering without it."
-        );
-        return;
-    }
-
-    if (!rowIdKeyData) {
-        alert(
-            "Internal error: row ID key not resolved in processed data domain."
-        );
-        return;
-    }
+    // ---------------------------------------------------------
+    // NEW: Stable row identity is ALWAYS our internal ManSeg_rowID
+    // ---------------------------------------------------------
+    AppState.rowIdColIndex = null;
+    AppState.rowIdColName  = ROWID_KEY;
 
     // Persist raw time origin (for segmented import re-alignment)
     if (
@@ -169,14 +174,16 @@ export function loadData(
     Tip.length = 0;
     TipSeg.length = 0;
     RowIDs.length = 0;
-    
+
     for (const r of data) {
         X.push(r.X);
         Y.push(r.Y);
         T.push(r.t);
         Tip.push(r.Tip);
         TipSeg.push(r.Tip_seg);
-        RowIDs.push(String(r[rowIdKeyData]));
+
+        // Row identity MUST come from ManSeg_rowID (string)
+        RowIDs.push(String(r[ROWID_KEY]));
     }
 
     AppState.X = X;
@@ -185,6 +192,7 @@ export function loadData(
     AppState.Tip = Tip;
     AppState.TipSeg = TipSeg;
     AppState.rowIds = RowIDs;
+
     AppState.detectedCols = detectedCols;
     AppState.originalRaw = originalRaw;
 }
@@ -201,6 +209,4 @@ export function resetLoaderState() {
     Tip.length = 0;
     TipSeg.length = 0;
     RowIDs.length = 0;
-
-    // IMPORTANT: timeColIndex MUST persist
 }

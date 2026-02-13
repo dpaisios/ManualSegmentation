@@ -1,6 +1,7 @@
 // -------------------------------------------------------------
 // export_data.js
 // Pure export logic: ORIGINAL rows + correct ManSegID assignment
+// Uses ManSeg_rowID as the ONLY stable row identity key.
 // -------------------------------------------------------------
 
 export function extractRowsForExport(originalRaw, selections, T, rowIds, rowIdColName) {
@@ -8,12 +9,13 @@ export function extractRowsForExport(originalRaw, selections, T, rowIds, rowIdCo
     if (!selections?.length) return [];
     if (!T?.length) return [];
     if (!rowIds?.length) return [];
-    if (!rowIdColName) return [];
 
-    // Build stable lookup: RowID -> raw row
+    const ROWID_KEY = rowIdColName || "ManSeg_rowID";
+
+    // Build stable lookup: ManSeg_rowID -> raw row
     const byId = new Map();
     for (const r of originalRaw) {
-        const id = r?.[rowIdColName];
+        const id = r?.[ROWID_KEY];
         if (id == null) continue;
         const key = String(id);
         if (!byId.has(key)) byId.set(key, r);
@@ -31,15 +33,18 @@ export function extractRowsForExport(originalRaw, selections, T, rowIds, rowIdCo
             const sel = ordered[s];
 
             if (t >= sel.t0 && t <= sel.t1) {
-
                 const rid = String(rowIds[i]);
                 const rawRow = byId.get(rid);
-                
+
+                // If we can't resolve the raw row by ManSeg_rowID, do NOT fall back to indices.
                 if (!rawRow) break;
 
                 const row = { ...rawRow };
 
-                // assign ID immediately (CORRECT DOMAIN)
+                // Ensure exported JSON always contains the stable ID
+                row[ROWID_KEY] = rid;
+
+                // assign selection metadata
                 row.ManSegID = sel.id ?? `#${s + 1}`;
                 row.Flag = sel.flagged ? 1 : 0;
                 row.Comments = String(sel.comment ?? "");

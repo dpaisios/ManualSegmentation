@@ -34,12 +34,12 @@ export const AppState = {
     // ---------------------------------------------------------
     // Export tracking (session-scoped)
     // ---------------------------------------------------------
-    // absoluteFilePath -> { exportCount, exportedAt }
+    // absoluteFilePath -> { exportCount, exportedAt, exportPath, hasRowID? }
     exportTracker: {},
 
     // absoluteFilePath -> selectionsVersion at last export
     lastExportedVersionByFile: {},
-    
+
     // time metadata (for segmented import)
     timeColIndex: null,
     timeColName: null,
@@ -47,8 +47,10 @@ export const AppState = {
     // raw time origin (for segmented import re-alignment)
     rawTime0: null,
 
-    // stable row identity (export correctness under filtering)
+    // ---------------------------------------------------------
+    // Stable row identity (must be ManSeg_rowID)
+    // ---------------------------------------------------------
     rowIdColIndex: null,
-    rowIdColName: null,
+    rowIdColName: "ManSeg_rowID",
     rowIds: null,
 };
