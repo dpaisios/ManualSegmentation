@@ -1,0 +1,33 @@
+{
+  "name": "manual-segmentation",
+  "version": "1.0.0",
+  "description": "Standalone manual handwriting segmentation application",
+  "main": "main.js",
+  "scripts": {
+    "start": "npm run build:js && electron .",
+    "build": "electron-builder",
+    "build:js": "esbuild app.js --bundle --outfile=app.bundle.js --minify --platform=browser",
+    "dist": "npm run build:js && electron-builder"
+  },
+  "build": {
+    "appId": "org.yourapp.id",
+    "productName": "ManualSegmentation",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "tempdata/**"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^39.2.4",
+    "electron-builder": "^24.13.3",
+    "esbuild": "^0.27.0"
+  }
+}

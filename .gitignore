@@ -1,7 +1,7 @@
+data/
 node_modules/
 dist/
 images_build/
-package.json
 package-lock.json
 app.bundle.js
 TODO.txt
