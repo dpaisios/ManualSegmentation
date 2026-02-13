@@ -6,3 +6,4 @@ Things to add:
 - Implement "free draw" XY plot selection.
 - Make the splitting tool a more general toggle - not selection specific.
 - Add "clear all selections".
+- In single file mode, check for saved segmentations as well. Also add an option to hide previous segmentation (for all modes).
