@@ -95,7 +95,9 @@ export function attachLifecycleController({
     // FOLDER SESSION: LOAD FILE BY INDEX
     // =========================================================
 
-    async function loadFileAtIndex(idx) {
+    // NOTE: second argument is intentionally accepted (some callers pass options)
+    // It is currently unused; keeping it prevents silent API mismatch.
+    async function loadFileAtIndex(idx, _opts = {}) {
         if (!AppState.fileList) return;
         if (idx < 0 || idx >= AppState.fileList.length) return;
 

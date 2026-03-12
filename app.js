@@ -25,17 +25,12 @@ import * as XY from "./src/xy_plot.js";
 import * as TB from "./src/time_bar.js";
 
 import {
-    drawSettings,
-    hitTestSettings
-} from "./src/settings_ui.js";
-
-import {
     extractRowsForExport,
     buildExportJSON
 } from "./src/export_data.js";
 
 import * as ID from "./src/selection_ids.js";
-import { createLabelEditor, isEditingSelection} from "./src/label_editor.js";
+import { createLabelEditor, isEditingSelection } from "./src/label_editor.js";
 import { attachTimeBarController } from "./src/time_bar_controller.js";
 import { placeIcon, clearOverlay, placeLabel } from "./src/icons_overlay.js";
 import { computeClusterLayout } from "./src/time_bar_primitives.js";
@@ -47,15 +42,11 @@ import { createCommentEditor, isEditingComment } from "./src/comment_editor.js";
 // -------------------------------------------------------------
 // Canvases
 // -------------------------------------------------------------
-const xyCanvas       = document.getElementById("xyCanvas");
-const xyCtx          = xyCanvas.getContext("2d");
+const xyCanvas   = document.getElementById("xyCanvas");
+const xyCtx      = xyCanvas.getContext("2d");
 
-const timeCanvas     = document.getElementById("timeCanvas");
-const timeCtx        = timeCanvas.getContext("2d");
-
-const settingsCanvas = document.getElementById("settingsCanvas");
-const settingsCtx    = settingsCanvas.getContext("2d");
-
+const timeCanvas = document.getElementById("timeCanvas");
+const timeCtx    = timeCanvas.getContext("2d");
 
 // -------------------------------------------------------------
 // Settings
@@ -63,9 +54,17 @@ const settingsCtx    = settingsCanvas.getContext("2d");
 let settingsOptions = [
     { label: "Remove edge lifts", checked: false },
     { label: "Remove last stroke", checked: false },
-    { label: "Show lifts",        checked: true }
+    { label: "Show lifts",        checked: true },
+    {
+        label: "Scale multiplier",
+        checked: false,
+        xText: "1",
+        yText: "1",
+        xValue: 1,
+        yValue: 1,
+        error: ""
+    }
 ];
-
 
 // -------------------------------------------------------------
 // Visibility policy
@@ -75,14 +74,12 @@ const visibility = createVisibilityPolicy({
     settingsOptions
 });
 
-
 // -------------------------------------------------------------
 // Helpers
 // -------------------------------------------------------------
 function smoothApproach(a, b, s = 0.2) {
     return a + (b - a) * s;
 }
-
 
 // -------------------------------------------------------------
 // Title bar
@@ -91,7 +88,6 @@ const titleBarController = attachTitleBar({
     titleBarEl: document.getElementById("titleBar"),
     AppState
 });
-
 
 // -------------------------------------------------------------
 // Redraw implementations
@@ -217,7 +213,6 @@ function redrawTimeBar(state) {
             opacity: sel.bubbleAlpha
         });
 
-        // Hover tooltip: only when NOT editing and selection is the active hovered one
         if (timeBarController?.state?.hoveredCommentTarget === sel && !isEditingComment(sel)) {
             const c = String(sel.comment ?? "").trim();
             if (c) {
@@ -226,7 +221,6 @@ function redrawTimeBar(state) {
 
                 const lines = c.split("\n");
 
-                // Measure the widest line in pixels
                 let maxLineW = 0;
                 for (const line of lines) {
                     const w = timeCtx.measureText(line.length ? line : " ").width;
@@ -236,10 +230,7 @@ function redrawTimeBar(state) {
                 const padX = 10;
                 const padY = 6;
 
-                // Tooltip width follows text width (still clamped for sanity)
                 const tipW = Math.min(420, Math.max(20, Math.ceil(maxLineW + padX * 2)));
-
-                // Height follows line count
                 const tipH = Math.max(24, lines.length * 16 + padY * 2);
 
                 timeCtx.restore();
@@ -271,18 +262,8 @@ function redrawTimeBar(state) {
 }
 
 function redrawSettings() {
-    if (!settingsController) return;
-
-    const layout = drawSettings(
-        settingsCtx,
-        settingsCanvas.width,
-        settingsCanvas.height,
-        settingsOptions
-    );
-
-    settingsController.setLayout(layout);
+    // no-op: settings are now in the title-bar menu
 }
-
 
 // -------------------------------------------------------------
 // Render orchestration
@@ -292,7 +273,6 @@ const renderers = createRenderers({
     redrawTimeBar: () => redrawTimeBar(timeBarController.state),
     redrawSettings
 });
-
 
 // -------------------------------------------------------------
 // Export controller
@@ -334,10 +314,9 @@ const labelEditor = createLabelEditor({
 const commentEditor = createCommentEditor({
     container: document.getElementById("appContainer"),
     onCommit: (sel, value) => {
-        const v = String(value ?? "").trimEnd(); // preserve internal newlines, trim only tail
+        const v = String(value ?? "").trimEnd();
         const prev = String(sel.comment ?? "");
 
-        // Save if changed (including empty -> empty no-op)
         if (v !== prev) {
             sel.comment = v;
             AppState.selectionsVersion++;
@@ -390,20 +369,20 @@ const xyController = attachXYController({
     }
 });
 
-const settingsController = attachSettingsController({
-    canvas: settingsCanvas,
+attachSettingsController({
+    titleBarController,
     AppState,
     settingsOptions,
-    hitTestSettings,
     loadData,
     originalRaw,
     colNamesOverrideGlobal,
     exportPathOverrideGlobal,
     resetXYSelection: () => xyController.resetSelection(),
     renderers,
-    exportData: exportController.exportData
-});
 
+    // NEW: allow settings to react to dataset loads
+    getCurrentData: () => originalRaw
+});
 
 // -------------------------------------------------------------
 // Lifecycle
@@ -420,9 +399,8 @@ const lifecycle = attachLifecycleController({
 
 titleBarController.setLifecycle(lifecycle);
 
-
 // -------------------------------------------------------------
-// Title-bar export handler (guarded)
+// Title-bar export handler
 // -------------------------------------------------------------
 let exporting = false;
 
@@ -438,7 +416,6 @@ titleBarController.setExportHandler(async () => {
     }
 });
 
-
 // -------------------------------------------------------------
 // Electron wiring
 // -------------------------------------------------------------
@@ -450,8 +427,7 @@ lifecycle.attachElectronListener();
 function applyCanvasSizesNow() {
     if (
         xyCanvas.clientWidth === 0 || xyCanvas.clientHeight === 0 ||
-        timeCanvas.clientWidth === 0 || timeCanvas.clientHeight === 0 ||
-        settingsCanvas.clientWidth === 0 || settingsCanvas.clientHeight === 0
+        timeCanvas.clientWidth === 0 || timeCanvas.clientHeight === 0
     ) return;
 
     xyCanvas.width = xyCanvas.clientWidth;
@@ -459,9 +435,6 @@ function applyCanvasSizesNow() {
 
     timeCanvas.width = timeCanvas.clientWidth;
     timeCanvas.height = timeCanvas.clientHeight;
-
-    settingsCanvas.width = settingsCanvas.clientWidth;
-    settingsCanvas.height = settingsCanvas.clientHeight;
 }
 
 let resizePending = false;
@@ -482,9 +455,8 @@ function resizeCanvases() {
 }
 window.addEventListener("resize", resizeCanvases);
 
-
 // -------------------------------------------------------------
-// Animation loop (bubble fade)
+// Animation loop
 // -------------------------------------------------------------
 function animate() {
     let need = false;
@@ -504,11 +476,9 @@ function animate() {
 }
 requestAnimationFrame(animate);
 
-
 // -------------------------------------------------------------
 // Init
 // -------------------------------------------------------------
 applyCanvasSizesNow();
-renderers.redrawSettings();
 titleBarController.updateTitleBar();
 resizeCanvases();

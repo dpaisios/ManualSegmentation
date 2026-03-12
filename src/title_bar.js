@@ -4,30 +4,28 @@
 // - file / folder buttons
 // - filename display
 // - folder dropdown + navigation
+// - settings button
 // -------------------------------------------------------------
 
 export function attachTitleBar({
     titleBarEl,
     AppState
 }) {
-    // ---------------------------------------------------------
-    // Internal state
-    // ---------------------------------------------------------
     let fileDropdown = null;
     let lifecycle = null;
     let prevBtn = null;
     let onDocMouseDown = null;
+    let settingsToggleHandler = null;
+    let settingsHasError = false;
+    let settingsErrorMessage = "";
 
-    // ---------------------------------------------------------
-    // Static DOM references
-    // ---------------------------------------------------------
     const left  = titleBarEl.querySelector(".title-left");
     const label = titleBarEl.querySelector(".title-label");
     const arrow = titleBarEl.querySelector(".dropdown-arrow");
     const nav   = titleBarEl.querySelector(".title-nav");
 
     // =========================================================
-    // FILE BUTTON (file-only)
+    // FILE BUTTON
     // =========================================================
     const fileBtn = document.createElement("button");
     fileBtn.className = "title-file-btn";
@@ -61,7 +59,7 @@ export function attachTitleBar({
     });
 
     // =========================================================
-    // FOLDER BUTTON (folder-only)
+    // FOLDER BUTTON
     // =========================================================
     const folderBtn = document.createElement("button");
     folderBtn.className = "title-folder-btn";
@@ -94,7 +92,6 @@ export function attachTitleBar({
         });
     });
 
-    // Insert buttons in stable order
     left.insertBefore(folderBtn, arrow);
     left.insertBefore(fileBtn, folderBtn);
 
@@ -134,6 +131,68 @@ export function attachTitleBar({
     }
 
     // =========================================================
+    // SETTINGS BUTTON
+    // =========================================================
+    const settingsBtn = document.createElement("button");
+    settingsBtn.className = "title-settings-btn";
+    settingsBtn.title = "Settings";
+
+    const settingsIcon = document.createElement("span");
+    settingsIcon.className = "title-icon title-settings-icon";
+    settingsBtn.appendChild(settingsIcon);
+
+    settingsBtn.dataset.state = "idle";
+
+    settingsBtn.addEventListener("mouseenter", () => {
+        if (settingsHasError) {
+            settingsBtn.dataset.state = "hover-error";
+            settingsBtn.title = settingsErrorMessage || "Some variables could not be mapped";
+            return;
+        }
+
+        if (settingsBtn.dataset.state !== "active") {
+            settingsBtn.dataset.state = "hover";
+        }
+    });
+
+    settingsBtn.addEventListener("mouseleave", () => {
+
+        if (settingsHasError) {
+            settingsBtn.dataset.state = "idle-error";
+            settingsBtn.title = "Settings";
+            return;
+        }
+
+        if (settingsBtn.dataset.state !== "active") {
+            settingsBtn.dataset.state = "idle";
+        }
+    });
+
+    settingsBtn.addEventListener("mousedown", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        settingsToggleHandler?.();
+    });
+
+    function setSettingsMenuOpen(isOpen) {
+
+        if (settingsHasError) {
+            settingsBtn.dataset.state = isOpen
+                ? "hover-error"
+                : "idle-error";
+
+            settingsBtn.title = isOpen
+                ? (settingsErrorMessage || "Some variables could not be mapped")
+                : "Settings";
+
+            return;
+        }
+
+        settingsBtn.dataset.state =
+            isOpen ? "active" : "idle";
+    }
+
+    // =========================================================
     // DROPDOWN HIT ZONE
     // =========================================================
     const hitZone = document.createElement("div");
@@ -148,48 +207,30 @@ export function attachTitleBar({
     }
 
     // =========================================================
-    // TITLE BAR UPDATE (AUTHORITATIVE)
+    // TITLE BAR UPDATE
     // =========================================================
     function updateTitleBar() {
-
-        // -----------------------------------------------------
-        // 1. Title bar is ALWAYS visible
-        // -----------------------------------------------------
         titleBarEl.style.display = "flex";
-
-        // -----------------------------------------------------
-        // 2. Reset dynamic elements
-        // -----------------------------------------------------
         nav.innerHTML = "";
         prevBtn = null;
 
-        // -----------------------------------------------------
-        // 3. No data loaded yet → minimal mode
-        // -----------------------------------------------------
         if (!AppState.dataLoaded) {
-
             label.textContent = "";
             arrow.style.display = "none";
 
             hitZone.classList.remove("active");
             closeDropdown();
 
-            // Export disabled
-            if (exportBtn.parentNode) {
-                exportBtn.remove();
+            if (exportBtn.parentNode) exportBtn.remove();
+            if (settingsBtn.parentNode !== nav) {
+                nav.appendChild(settingsBtn);
             }
 
             return;
         }
 
-        // -----------------------------------------------------
-        // 4. Update title text
-        // -----------------------------------------------------
         label.textContent = AppState.originalFileName ?? "";
 
-        // -----------------------------------------------------
-        // 5. Determine mode
-        // -----------------------------------------------------
         const inFolderMode =
             Array.isArray(AppState.fileList) &&
             AppState.fileList.length > 0;
@@ -197,15 +238,8 @@ export function attachTitleBar({
         arrow.style.display = inFolderMode ? "" : "none";
         folderBtn.dataset.state = "folder-idle";
 
-        // -----------------------------------------------------
-        // 6. Ensure export button placement (stable DOM)
-        // -----------------------------------------------------
         const exportParent = exportBtn.parentNode;
-
         if (!inFolderMode) {
-            // FILE MODE
-            // No dropdown, no navigation
-
             hitZone.classList.remove("active");
             closeDropdown();
 
@@ -213,19 +247,14 @@ export function attachTitleBar({
                 left.insertBefore(exportBtn, label);
             }
 
+            nav.appendChild(settingsBtn);
             return;
         }
 
-        // -----------------------------------------------------
-        // 7. Folder mode layout
-        // -----------------------------------------------------
         if (exportParent !== left || exportBtn.nextSibling !== arrow) {
             left.insertBefore(exportBtn, arrow);
         }
 
-        // -----------------------------------------------------
-        // 8. Prev / Next navigation
-        // -----------------------------------------------------
         const prev = document.createElement("button");
         prev.innerHTML = `
             <svg width="14" height="14" viewBox="0 0 24 24">
@@ -252,7 +281,7 @@ export function attachTitleBar({
         next.disabled = AppState.fileIndex >= AppState.fileList.length - 1;
         next.onclick = () => lifecycle?.nextFile();
 
-        nav.append(prev, next);
+        nav.append(prev, next, settingsBtn);
         prevBtn = prev;
 
         updateHitZone();
@@ -321,9 +350,7 @@ export function attachTitleBar({
         fileDropdown.style.left = `${labelRect.left}px`;
         fileDropdown.style.top  = `${labelRect.bottom + 4}px`;
 
-        const maxWidth =
-            Math.max(160, navRect.left - labelRect.left);
-
+        const maxWidth = Math.max(160, navRect.left - labelRect.left);
         fileDropdown.style.width = `${maxWidth}px`;
 
         AppState.fileList.forEach((fullPath, idx) => {
@@ -338,7 +365,6 @@ export function attachTitleBar({
                     ? tracked.exportCount
                     : null;
 
-            // exported styling
             if (count != null) {
                 item.classList.add("exported");
                 item.title = `Exported ${count} segment${count === 1 ? "" : "s"}`;
@@ -354,17 +380,12 @@ export function attachTitleBar({
 
             item.append(countEl, nameEl);
 
-            // -------------------------------------------------
-            // Delete exported selection button (right edge)
-            // -------------------------------------------------
             if (tracked && tracked.exportPath) {
                 const deleteBtn = document.createElement("button");
                 deleteBtn.className = "fileDropdownDelete";
                 deleteBtn.title = "Delete exported segmentation";
 
-                deleteBtn.innerHTML = `
-                    <span class="trashIconImg"></span>
-                `;
+                deleteBtn.innerHTML = `<span class="trashIconImg"></span>`;
 
                 deleteBtn.onclick = e => {
                     e.stopPropagation();
@@ -382,11 +403,9 @@ export function attachTitleBar({
                         return;
                     }
 
-                    // Update AppState
                     delete AppState.exportTracker[fullPath];
                     delete AppState.lastExportedVersionByFile[fullPath];
 
-                    // Rebuild dropdown to reflect state
                     closeDropdown();
                     toggleFileDropdown();
                 };
@@ -422,16 +441,12 @@ export function attachTitleBar({
         document.body.appendChild(fileDropdown);
         arrow.classList.add("open");
 
-        // ---------------------------------------------------------
-        // Outside click handling (capture phase)
-        // ---------------------------------------------------------
         onDocMouseDown = e => {
             if (!fileDropdown) return;
 
             const clickInTitleBar = titleBarEl.contains(e.target);
 
             if (clickInTitleBar && isInDropdownZone(e.clientX)) {
-                // let title bar toggle logic handle it
                 return;
             }
 
@@ -482,9 +497,36 @@ export function attachTitleBar({
     return {
         updateTitleBar,
         setLifecycle,
+
+        setSettingsError(hasError, message = "") {
+
+            settingsHasError = !!hasError;
+            settingsErrorMessage = message;
+
+            if (settingsHasError) {
+                settingsBtn.dataset.state = "idle-error";
+                settingsBtn.title = settingsErrorMessage || "Some variables could not be mapped";
+            }
+            else {
+                settingsBtn.dataset.state = "idle";
+                settingsBtn.title = "Settings";
+            }
+        },
+
         setExportHandler(fn) {
             exportBtn.onclick = fn;
         },
-        setExportSuccess
+
+        setExportSuccess,
+
+        setSettingsHandler(fn) {
+            settingsToggleHandler = fn;
+        },
+
+        setSettingsMenuOpen,
+
+        getSettingsButtonElement() {
+            return settingsBtn;
+        }
     };
 }

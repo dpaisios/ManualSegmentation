@@ -53,4 +53,61 @@ export const AppState = {
     rowIdColIndex: null,
     rowIdColName: "ManSeg_rowID",
     rowIds: null,
+
+        // ---------------------------------------------------------
+    // Manual variable mapping (session scoped)
+    // ---------------------------------------------------------
+    manualMapping: {
+        enabled: false,
+
+        // user entered text (what appears in fields)
+        fields: {
+            X: "",
+            Y: "",
+            Z: "",
+            t: "",
+            P: "",
+            v: "",
+            v_pits: ""
+        },
+
+        // resolved column index after validation
+        resolved: {
+            X: null,
+            Y: null,
+            Z: null,
+            t: null,
+            P: null,
+            v: null,
+            v_pits: null
+        },
+
+        // validation state per variable
+        status: {
+            X: "empty",      // empty | auto | valid | invalid | duplicate | ambiguous
+            Y: "empty",
+            Z: "empty",
+            t: "empty",
+            P: "empty",
+            v: "empty",
+            v_pits: "empty"
+        },
+
+        // hover error messages
+        errors: {
+            X: "",
+            Y: "",
+            Z: "",
+            t: "",
+            P: "",
+            v: "",
+            v_pits: ""
+        },
+
+        // true when at least one valid manual mapping exists
+        hasAnyMapping: false,
+
+        // true when invalid mappings exist
+        hasErrors: false
+    },
 };

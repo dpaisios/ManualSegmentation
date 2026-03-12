@@ -33,6 +33,37 @@ export let colNamesOverrideGlobal = null;
 const ROWID_KEY = "ManSeg_rowID";
 
 // -------------------------------------------------------------
+// Helpers
+// -------------------------------------------------------------
+function getActiveManualOverrides() {
+    const mm = AppState.manualMapping;
+    if (!mm || !mm.enabled) return null;
+
+    const out = {};
+    let any = false;
+
+    const vars = ["X", "Y", "Z", "t", "P", "v", "v_pits"];
+
+    for (const key of vars) {
+        const idx = mm?.resolved?.[key];
+        const source = mm?.meta?.[key]?.source ?? null;
+
+        // Only user-committed mappings lock detection.
+        // Auto fields must stay free so detection can rerun on them.
+        if (
+            source !== "auto" &&
+            typeof idx === "number" &&
+            idx >= 0
+        ) {
+            out[key] = idx;
+            any = true;
+        }
+    }
+
+    return any ? out : null;
+}
+
+// -------------------------------------------------------------
 // Main loader / reprocessor
 // -------------------------------------------------------------
 export function loadData(
@@ -125,10 +156,15 @@ export function loadData(
     // ---------------------------------------------------------
     // Column detection + canonicalisation
     // ---------------------------------------------------------
+    const manualOverrides = getActiveManualOverrides();
+
     const { detectedCols: cols, processedData } =
-        detectColumns(data, colNames);
+        detectColumns(data, colNames, manualOverrides);
 
     detectedCols = cols;
+
+    // Persist active manual overrides for current loaded dataset
+    AppState.activeManualOverrides = manualOverrides ?? {};
 
     // Persist time column metadata for segmented import
     AppState.timeColIndex =
@@ -157,6 +193,18 @@ export function loadData(
     data = processedData;
 
     buildCanonicalFields(data, detectedCols, colNames);
+
+    const scaleOpt = settingsOptions?.find(o => o.label === "Scale multiplier");
+    if (scaleOpt?.checked) {
+        const sx = Number(scaleOpt.xValue);
+        const sy = Number(scaleOpt.yValue);
+
+        for (const row of data) {
+            row.X *= sx;
+            row.Y *= sy;
+        }
+    }
+
     computeTipSeg(data);
     timeNormalization(data);
 

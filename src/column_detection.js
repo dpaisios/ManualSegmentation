@@ -4,7 +4,7 @@
 // extracted from the loadData() in your current app.js.
 //
 // Exports:
-//   detectColumns(data, colNames)
+//   detectColumns(data, colNames, manualOverrides?)
 //   buildCanonicalFields(data, detectedCols)
 //   computeTipSeg(data)
 //   timeNormalization(data)
@@ -64,13 +64,15 @@ function filterNegativeOnFoundCols(data, found, colNames, keys) {
 
 // -------------------------------------------------------------
 // MAIN: automatic detection logic
-// This is *exactly* the logic from your current loadData()
-// but turned into a pure function.
 //
-// INPUT: data (array of objects), colNames (array of column names)
-// OUTPUT: detectedCols = { X, Y, Z, P, t, Index }
+// INPUT:
+//   data (array of objects),
+//   colNames (array of column names),
+//   manualOverrides (optional object, e.g. { X: 0, t: 4, v: 7 })
+//
+// OUTPUT: detectedCols = { X, Y, Z, P, t, Index, v, v_pits }
 // -------------------------------------------------------------
-export function detectColumns(data, colNames) {
+export function detectColumns(data, colNames, manualOverrides = null) {
 
     const nCols = colNames.length;
 
@@ -96,10 +98,6 @@ export function detectColumns(data, colNames) {
         };
     });
 
-    const missing =
-        [X_col, Y_col, Z_col, t_col, P_col, idx_col]
-            .some(v => v === null || v === -1);
-
     // result holder
     const found = {
         X: X_col,
@@ -107,12 +105,43 @@ export function detectColumns(data, colNames) {
         Z: Z_col,
         t: t_col,
         P: P_col,
-        Index: idx_col
+        Index: idx_col,
+        v: null,
+        v_pits: null
     };
 
     // ---------------------------------------------------------
+    // Apply manual overrides FIRST.
+    // Manually mapped variables must not be overwritten later.
+    // ---------------------------------------------------------
+    if (manualOverrides && typeof manualOverrides === "object") {
+        for (const key of ["X", "Y", "Z", "t", "P", "v", "v_pits"]) {
+            const ix = manualOverrides[key];
+            if (typeof ix === "number" && ix >= 0 && ix < nCols) {
+                found[key] = ix;
+            }
+        }
+    }
+
+    // Columns locked by manual mapping must never be reused
+    const lockedCols = new Set(
+        Object.entries(found)
+            .filter(([k,v]) =>
+                v !== null &&
+                v !== -1 &&
+                manualOverrides &&
+                manualOverrides[k] === v
+            )
+            .map(([k,v]) => v)
+    );
+
+    const missing =
+        [found.X, found.Y, found.Z, found.t, found.P, found.Index]
+            .some(v => v === null || v === -1);
+
+    // ---------------------------------------------------------
     // INTERMEDIARY STEP (your requirement):
-    // If X/Y/Z are already found by NAME, filter on X/Y/Z NOW,
+    // If X/Y/Z are already found, filter on X/Y/Z NOW,
     // even if other columns are missing. Then continue heuristics.
     // ---------------------------------------------------------
     if (found.X != null && found.Y != null && found.Z != null) {
@@ -120,7 +149,7 @@ export function detectColumns(data, colNames) {
     }
 
     if (!missing) {
-        // fully detected by name -> filter on X/Y/Z/t/P and return
+        // fully detected by names/manual mapping -> filter on X/Y/Z/t/P and return
         data = filterNegativeOnFoundCols(data, found, colNames, ["X", "Y", "Z", "t", "P"]);
         return {
             detectedCols: found,
@@ -152,13 +181,20 @@ export function detectColumns(data, colNames) {
 
     // ---------------- AUTO INDEX -----------------
     if (found.Index === null) {
-        let best = 0;
-        for (let i = 1; i < stats.length; i++) {
-            if (stats[i].range_diff < stats[best].range_diff)
-                best = i;
-        }
-        if (stats[best].mdn_diff !== 0) {
-            found.Index = best;
+        const candidates = dataCol.filter(j => !lockedCols.has(j));
+
+        if (candidates.length) {
+            let best = candidates[0];
+
+            for (const i of candidates.slice(1)) {
+                if (stats[i].range_diff < stats[best].range_diff) {
+                    best = i;
+                }
+            }
+
+            if (stats[best].mdn_diff !== 0) {
+                found.Index = best;
+            }
         }
     }
 
@@ -169,7 +205,7 @@ export function detectColumns(data, colNames) {
             .filter(o => o.d.mdn_diff > 0)
             .map(o => o.i);
 
-        const exclude = new Set([found.Index]);
+        const exclude = new Set([found.Index, ...lockedCols]);
         const pos2 = pos.filter(i => !exclude.has(i));
 
         if (pos2.length > 1) {
@@ -189,7 +225,10 @@ export function detectColumns(data, colNames) {
 
     // ---------------- AUTO PRESSURE ----------------
     if (found.P === null) {
-        const rem = dataCol.filter(j => !Object.values(found).includes(j));
+        const rem = dataCol.filter(j =>
+            !Object.values(found).includes(j) &&
+            !lockedCols.has(j)
+        );
         const zeroLow = rem.filter(j => colRanges2[j].min === 0);
         if (zeroLow.length) {
             let best = zeroLow[0];
@@ -217,7 +256,8 @@ export function detectColumns(data, colNames) {
     // ---------------- AUTO Z ------------------------
     if (found.Z === null) {
         const rem = dataCol.filter(j =>
-            !Object.values(found).includes(j)
+            !Object.values(found).includes(j) &&
+            !lockedCols.has(j)
         );
         for (let j of rem) {
             const name = colNames[j];
@@ -228,10 +268,13 @@ export function detectColumns(data, colNames) {
         }
     }
 
-   // ---------------- AUTO X/Y ----------------------
+    // ---------------- AUTO X/Y ----------------------
     if (found.X === null || found.Y === null) {
 
-        const rem = dataCol.filter(j => !Object.values(found).includes(j));
+        const rem = dataCol.filter(j =>
+            !Object.values(found).includes(j) &&
+            !lockedCols.has(j)
+        );
         let XY_candidates = null;
 
         // case: XY before Z
@@ -261,8 +304,8 @@ export function detectColumns(data, colNames) {
         if (XY_candidates && longSegs.length) {
             const tName = colNames[found.t];
             const [c1, c2] = XY_candidates;
-            const xName = colNames[c1]; // candidate c1
-            const yName = colNames[c2]; // candidate c2
+            const xName = colNames[c1];
+            const yName = colNames[c2];
 
             const slopes1 = [];
             const slopes2 = [];
@@ -283,20 +326,20 @@ export function detectColumns(data, colNames) {
             const med1 = slopes1.length ? Math.abs(median(slopes1)) : -Infinity;
             const med2 = slopes2.length ? Math.abs(median(slopes2)) : -Infinity;
 
+            // Only fill variables that are still unmapped
             if (med1 >= med2) {
-                found.X = c1;
-                found.Y = c2;
+                if (found.X === null) found.X = c1;
+                if (found.Y === null) found.Y = c2;
             } else {
-                found.X = c2;
-                found.Y = c1;
+                if (found.X === null) found.X = c2;
+                if (found.Y === null) found.Y = c1;
             }
         }
     }
 
-    // Final filter: once X/Y/Z/t/P are known (by name or heuristics), filter on them.
+    // Final filter: once X/Y/Z/t/P are known (by name, manual mapping, or heuristics), filter on them.
     data = filterNegativeOnFoundCols(data, found, colNames, ["X", "Y", "Z", "t", "P"]);
 
-    // return mapping + modified data (Tip,TipSeg attached)
     return {
         detectedCols: found,
         processedData: data

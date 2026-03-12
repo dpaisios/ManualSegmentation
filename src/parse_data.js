@@ -13,6 +13,17 @@ function detectDelimiter(line) {
     return /\s+/;
 }
 
+function splitLine(line, delimiter) {
+    if (delimiter instanceof RegExp) {
+        return line
+            .trim()
+            .split(delimiter)
+            .filter(v => v.length > 0);
+    }
+
+    return line.split(delimiter).map(s => s.trim());
+}
+
 export function parseData(rawText, fileName) {
     const ext = fileName.split(".").pop().toLowerCase();
 
@@ -29,7 +40,7 @@ export function parseData(rawText, fileName) {
 
     const delimiter = detectDelimiter(lines[0]);
 
-    const first = lines[0].split(delimiter).map(s => s.trim());
+    const first = splitLine(lines[0], delimiter);
     const hasHeader = !first.every(isNumeric);
 
     let header, startRow;
@@ -43,7 +54,7 @@ export function parseData(rawText, fileName) {
     }
 
     return lines.slice(startRow).map(line => {
-        const values = line.split(delimiter);
+        const values = splitLine(line, delimiter);
         const obj = {};
         for (let i = 0; i < header.length; i++) {
             obj[header[i]] = values[i];
