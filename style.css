@@ -440,6 +440,52 @@ canvas {
     white-space: normal;
 }
 
+/* SETTINGS CHECKBOX GROUP BLOCK ------------------------------ */
+
+.settingsGroupBlock{
+    display:block;
+}
+
+.settingsGroupChildren{
+    padding: 2px 12px 6px 0;
+}
+
+.settingsGroupChild{
+    display:flex;
+    align-items:center;
+    gap:8px;
+
+    padding:3px 10px 3px 36px;   /* match Scale/Manual left offset */
+
+    margin-top:0;
+
+    width:100%;
+    box-sizing:border-box;
+}
+
+.settingsGroupToggle.disabled{
+    cursor: default;
+    opacity: 0.55;
+}
+
+.settingsGroupToggle.disabled:hover{
+    background: transparent;
+}
+
+.settingsMenuCheck.disabled{
+    background: #ededed;
+    border-color: #a7a7a7;
+}
+
+.settingsMenuLabel.disabled{
+    color: #8a8a8a;
+}
+
+.settingsGroupExpand:disabled{
+    opacity: 0.35;
+    cursor: default;
+}
+
 /* SETTINGS MANUAL MAPPING ------------------------------------ */
 
 .settingsManualBlock {
@@ -611,7 +657,8 @@ canvas {
 /* EXPAND ARROW */
 
 .settingsManualExpand,
-.settingsScaleExpand{
+.settingsScaleExpand,
+.settingsGroupExpand{
     flex: 0 0 18px;
     width: 18px;
     height: 18px;
@@ -630,13 +677,15 @@ canvas {
 }
 
 .settingsManualExpand:hover,
-.settingsScaleExpand:hover{
+.settingsScaleExpand:hover,
+.settingsGroupExpand:hover{
     color:#222;
     background: transparent;
 }
 
 .settingsManualExpand.expanded,
-.settingsScaleExpand.expanded{
+.settingsScaleExpand.expanded,
+.settingsGroupExpand.expanded{
     transform: rotate(90deg);
     color: #222;
 }

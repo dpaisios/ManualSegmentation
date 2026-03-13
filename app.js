@@ -54,7 +54,23 @@ const timeCtx    = timeCanvas.getContext("2d");
 let settingsOptions = [
     { label: "Remove edge lifts", checked: false },
     { label: "Remove last stroke", checked: false },
-    { label: "Show lifts",        checked: true },
+    { label: "Show lifts", checked: true },
+    {
+        label: "Show velocity minima",
+        checked: AppState.display.velocityMinima.enabled,
+        expanded: false,
+        enabled: AppState.overlays.velocityMinima.available,
+        children: [
+            {
+                label: "XY plot",
+                checked: AppState.display.velocityMinima.showXY
+            },
+            {
+                label: "Time bar",
+                checked: AppState.display.velocityMinima.showTimeBar
+            }
+        ]
+    },
     {
         label: "Scale multiplier",
         checked: false,
@@ -80,6 +96,21 @@ const visibility = createVisibilityPolicy({
 function smoothApproach(a, b, s = 0.2) {
     return a + (b - a) * s;
 }
+
+function syncVelocityMinimaSetting() {
+    const opt = settingsOptions.find(o => o.label === "Show velocity minima");
+    if (!opt) return;
+
+    opt.enabled = !!AppState.overlays?.velocityMinima?.available;
+    opt.checked = !!AppState.display?.velocityMinima?.enabled;
+
+    if (Array.isArray(opt.children) && opt.children.length >= 2) {
+        opt.children[0].checked = !!AppState.display.velocityMinima.showXY;
+        opt.children[1].checked = !!AppState.display.velocityMinima.showTimeBar;
+    }
+}
+
+syncVelocityMinimaSetting();
 
 // -------------------------------------------------------------
 // Title bar
@@ -110,6 +141,14 @@ function redrawXY() {
     const hoveredSel =
         timeBarController?.state?.deleteTarget ?? null;
 
+    const vmOverlay = AppState.overlays.velocityMinima;
+    const vmDisplay = AppState.display.velocityMinima;
+
+    const velocityMinimaIdxsXY =
+        vmOverlay.available && vmDisplay.enabled && vmDisplay.showXY
+            ? vmOverlay.indices
+            : [];
+
     XY.drawXYFromSelections(
         xyCtx,
         X, Y, Tip, TipSeg,
@@ -122,7 +161,8 @@ function redrawXY() {
         xyCanvas.height,
         visibility.showPenUp(),
         timeBarController.state.split,
-        hoveredSel
+        hoveredSel,
+        velocityMinimaIdxsXY
     );
 
     const box = xyController?.getSelectBox?.() ?? null;
@@ -139,6 +179,14 @@ function redrawXY() {
 function redrawTimeBar(state) {
     if (!AppState.dataLoaded) return;
 
+    const vmOverlay = AppState.overlays.velocityMinima;
+    const vmDisplay = AppState.display.velocityMinima;
+
+    const velocityMinimaIdxsTimeBar =
+        vmOverlay.available && vmDisplay.enabled && vmDisplay.showTimeBar
+            ? vmOverlay.indices
+            : [];
+
     TB.drawTimeBar(
         timeCtx,
         T, Tip,
@@ -149,7 +197,8 @@ function redrawTimeBar(state) {
         timeCanvas.width,
         timeCanvas.height,
         state.split,
-        state.mergePreview
+        state.mergePreview,
+        velocityMinimaIdxsTimeBar
     );
 
     clearOverlay("timebar-");

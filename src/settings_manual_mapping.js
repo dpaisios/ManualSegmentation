@@ -136,6 +136,38 @@ export function createManualMappingController({
         return true;
     }
 
+        function isColumnBinary(index0) {
+        const raw = getDatasetRaw();
+        const columns = getDatasetColumns();
+        const col = columns[index0];
+        if (!raw || !col) return false;
+
+        for (const row of raw) {
+            const v = row[col.name];
+            if (v == null || String(v).trim() === "") return false;
+
+            const n = Number(v);
+            if (!Number.isFinite(n)) return false;
+            if (n !== 0 && n !== 1) return false;
+        }
+
+        return true;
+    }
+
+    function getManualValidationError(key, resolvedIndex) {
+        if (resolvedIndex == null) return "";
+
+        if (!isColumnNumeric(resolvedIndex)) {
+            return "Selected column is not numeric";
+        }
+
+        if (key === "v_pits" && !isColumnBinary(resolvedIndex)) {
+            return "Variable needs to be binary";
+        }
+
+        return "";
+    }
+
     function formatAutoFieldForIndex(index0) {
         const columns = getDatasetColumns();
         const counts = getDuplicateNameCounts(columns);
@@ -379,8 +411,8 @@ export function createManualMappingController({
                 }
             }
 
-            if (!invalid && resolvedIndex != null && !isColumnNumeric(resolvedIndex)) {
-                invalid = "Selected column is not numeric";
+            if (!invalid && resolvedIndex != null) {
+                invalid = getManualValidationError(key, resolvedIndex);
             }
 
             if (invalid) {
@@ -446,6 +478,7 @@ export function createManualMappingController({
         getDatasetColumns,
         getDuplicateNameCounts,
         isColumnNumeric,
+        isColumnBinary,
         formatAutoFieldForIndex,
         getNumericDatasetColumns,
         getColumnAssignments,

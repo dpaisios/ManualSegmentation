@@ -19,6 +19,24 @@ export const AppState = {
     originalFileName: null,
     originalFilePath: null,
 
+    // derived overlays
+    overlays: {
+        velocityMinima: {
+            available: false,
+            source: null,   // null | "mapped" | "computed"
+            indices: []
+        }
+    },
+
+    // display state
+    display: {
+        velocityMinima: {
+            enabled: false,
+            showXY: true,
+            showTimeBar: true
+        }
+    },
+    
     // selections
     selections: [],
 

@@ -110,6 +110,45 @@ function applyXYDimMask(ctx, T, W, H) {
     ctx.restore();
 }
 
+function drawVelocityMinimaTicks(ctx, minimaIdxs, T, timeToX, barY0, barY1) {
+    if (!Array.isArray(minimaIdxs) || minimaIdxs.length === 0) return;
+    if (!Array.isArray(T) || T.length === 0) return;
+
+    const y0 = barY0 + 3;
+    const y1 = Math.min(barY0 + 13, barY1 - 3);
+
+    ctx.save();
+    ctx.lineCap = "round";
+
+    for (const i of minimaIdxs) {
+        if (!Number.isFinite(i)) continue;
+        if (i < 0 || i >= T.length) continue;
+
+        const x = timeToX(T[i]);
+        if (!Number.isFinite(x)) continue;
+
+        const xp = Math.round(x) + 0.5;
+
+        // white separation stroke
+        ctx.strokeStyle = "rgba(255,255,255,0.92)";
+        ctx.lineWidth = 3.2;
+        ctx.beginPath();
+        ctx.moveTo(xp, y0);
+        ctx.lineTo(xp, y1);
+        ctx.stroke();
+
+        // amber core
+        ctx.strokeStyle = "rgba(214,140,32,0.98)";
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(xp, y0);
+        ctx.lineTo(xp, y1);
+        ctx.stroke();
+    }
+
+    ctx.restore();
+}
+
 // -------------------------------------------------------------
 // Split line preview (time bar)
 // -------------------------------------------------------------
@@ -151,7 +190,8 @@ export function drawTimeBar(
     _deleteTarget,  // unused; cluster visuals are overlay-owned (kept for signature compatibility)
     W, H,
     splitState,
-    mergePreview = null
+    mergePreview = null,
+    velocityMinimaIdxs = []
 ) {
     if (!T || T.length === 0) {
         ctx.clearRect(0, 0, W, H);
@@ -195,6 +235,18 @@ export function drawTimeBar(
         ctx.fillStyle = (lastTip === 0) ? "#bbb" : "#acacacff";
         ctx.fillRect(x0, barY0, x1 - x0, barY1 - barY0);
     }
+
+    // ---------------------------------------------------------
+    // 1.5) Velocity minima ticks
+    // ---------------------------------------------------------
+    drawVelocityMinimaTicks(
+        ctx,
+        velocityMinimaIdxs,
+        T,
+        timeToX,
+        barY0,
+        barY1
+    );
 
     // ---------------------------------------------------------
     // 2) Ticks

@@ -63,6 +63,64 @@ function getActiveManualOverrides() {
     return any ? out : null;
 }
 
+function buildVelocityMinimaOverlay(data, colNames) {
+    const mm = AppState.manualMapping;
+    const resolvedIdx = mm?.resolved?.v_pits;
+
+    if (
+        !mm ||
+        !mm.enabled ||
+        typeof resolvedIdx !== "number" ||
+        resolvedIdx < 0 ||
+        resolvedIdx >= colNames.length
+    ) {
+        return {
+            available: false,
+            source: null,
+            indices: []
+        };
+    }
+
+    const colName = colNames[resolvedIdx];
+    if (!colName) {
+        return {
+            available: false,
+            source: null,
+            indices: []
+        };
+    }
+
+    const indices = [];
+
+    for (let i = 0; i < data.length; i++) {
+        const v = Number(data[i]?.[colName]);
+
+        if (!Number.isFinite(v)) {
+            return {
+                available: false,
+                source: null,
+                indices: []
+            };
+        }
+
+        if (v === 1) {
+            indices.push(i);
+        } else if (v !== 0) {
+            return {
+                available: false,
+                source: null,
+                indices: []
+            };
+        }
+    }
+
+    return {
+        available: true,
+        source: "mapped",
+        indices
+    };
+}
+
 // -------------------------------------------------------------
 // Main loader / reprocessor
 // -------------------------------------------------------------
@@ -216,6 +274,8 @@ export function loadData(
         data = removeEdgeLifts(data);
     }
 
+    const velocityMinimaOverlay = buildVelocityMinimaOverlay(data, colNames);
+    
     X.length = 0;
     Y.length = 0;
     T.length = 0;
@@ -243,6 +303,7 @@ export function loadData(
 
     AppState.detectedCols = detectedCols;
     AppState.originalRaw = originalRaw;
+    AppState.overlays.velocityMinima = velocityMinimaOverlay;
 }
 
 // -------------------------------------------------------------
@@ -257,4 +318,9 @@ export function resetLoaderState() {
     Tip.length = 0;
     TipSeg.length = 0;
     RowIDs.length = 0;
+    AppState.overlays.velocityMinima = {
+        available: false,
+        source: null,
+        indices: []
+    };
 }

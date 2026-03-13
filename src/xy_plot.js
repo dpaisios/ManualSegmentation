@@ -96,6 +96,40 @@ export function drawXY(ctx, X, Y, Tip, TipSeg, visibleIdxs, transform, canvasWid
     }
 }
 
+function drawVelocityMinimaXY(
+    ctx,
+    X, Y,
+    minimaIdxs,
+    transform,
+    canvasHeight
+) {
+    if (!Array.isArray(minimaIdxs) || minimaIdxs.length === 0) return;
+
+    ctx.save();
+
+    for (const i of minimaIdxs) {
+        if (!Number.isFinite(i)) continue;
+        if (i < 0 || i >= X.length || i >= Y.length) continue;
+
+        const px = toCanvasX(X[i], transform);
+        const py = toCanvasY(Y[i], canvasHeight, transform);
+
+        // outer halo / outline
+        ctx.beginPath();
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.arc(px, py, 3.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // core marker
+        ctx.beginPath();
+        ctx.fillStyle = "rgba(214,140,32,0.95)";
+        ctx.arc(px, py, 2.1, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.restore();
+}
+
 // -------------------------------------------------------------
 // Highlight specific (t0, t1) on XY plot
 // -------------------------------------------------------------
@@ -249,7 +283,8 @@ export function drawXYFromSelections(
     canvasHeight,
     showUp,
     splitState,
-    hoveredSel = null
+    hoveredSel = null,
+    velocityMinimaIdxs = []
 ) {
     // ---------------------------------------------------------
     // State flags
@@ -279,6 +314,17 @@ export function drawXYFromSelections(
         visibleIdxs,
         transform,
         canvasWidth,
+        canvasHeight
+    );
+
+    // ---------------------------------------------------------
+    // 1b) Velocity minima markers
+    // ---------------------------------------------------------
+    drawVelocityMinimaXY(
+        ctx,
+        X, Y,
+        velocityMinimaIdxs,
+        transform,
         canvasHeight
     );
 

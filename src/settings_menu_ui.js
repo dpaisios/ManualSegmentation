@@ -49,6 +49,126 @@ export function buildRegularItem(opt, index, toggleOption) {
     return item;
 }
 
+export function buildCheckboxGroupItem(opt, index, toggleOption, toggleChildOption) {
+    const wrap = document.createElement("div");
+    wrap.className = "settingsGroupBlock";
+    wrap.dataset.settingIndex = String(index);
+
+    const top = document.createElement("div");
+    top.className = "settingsMenuItem settingsGroupToggle";
+    if (opt.enabled === false) top.classList.add("disabled");
+
+    const check = document.createElement("span");
+    check.className = "settingsMenuCheck settingsGroupCheck";
+    if (opt.checked) check.classList.add("checked");
+    if (opt.enabled === false) check.classList.add("disabled");
+
+    const checkHit = document.createElement("button");
+    checkHit.type = "button";
+    checkHit.className = "settingsCheckHit";
+    checkHit.appendChild(check);
+
+    const label = document.createElement("span");
+    label.className = "settingsMenuLabel";
+    label.textContent = opt.label;
+    if (opt.enabled === false) label.classList.add("disabled");
+
+    const expandBtn = document.createElement("button");
+    expandBtn.type = "button";
+    expandBtn.className = "settingsManualExpand settingsGroupExpand";
+    expandBtn.textContent = "▸";
+    expandBtn.disabled = opt.enabled === false;
+    if (opt.expanded) expandBtn.classList.add("expanded");
+
+    top.append(checkHit, label, expandBtn);
+
+    const childrenWrap = document.createElement("div");
+    childrenWrap.className = "settingsGroupChildren";
+    childrenWrap.style.display = opt.expanded ? "" : "none";
+
+    (opt.children ?? []).forEach((child, childIndex) => {
+        const childItem = document.createElement("button");
+        childItem.type = "button";
+        childItem.className = "settingsMenuItem settingsGroupChild";
+        childItem.dataset.settingIndex = String(index);
+        childItem.dataset.childIndex = String(childIndex);
+
+        const childCheck = document.createElement("span");
+        childCheck.className = "settingsMenuCheck settingsGroupChildCheck";
+        if (child.checked) childCheck.classList.add("checked");
+
+        const childLabel = document.createElement("span");
+        childLabel.className = "settingsMenuLabel";
+        childLabel.textContent = child.label;
+
+        childItem.append(childCheck, childLabel);
+
+        childItem.addEventListener("mousedown", e => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        childItem.addEventListener("click", e => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleChildOption(index, childIndex);
+        });
+
+        childrenWrap.appendChild(childItem);
+    });
+
+    checkHit.addEventListener("mousedown", e => {
+        e.preventDefault();
+        e.stopPropagation();
+    });
+
+    checkHit.addEventListener("click", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (opt.enabled === false) return;
+        toggleOption(index);
+    });
+
+    expandBtn.addEventListener("mousedown", e => {
+        e.preventDefault();
+        e.stopPropagation();
+    });
+
+    expandBtn.addEventListener("click", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (opt.enabled === false) return;
+        opt.expanded = !opt.expanded;
+        wrap.classList.toggle("expanded", !!opt.expanded);
+        expandBtn.classList.toggle("expanded", !!opt.expanded);
+        childrenWrap.style.display = opt.expanded ? "" : "none";
+    });
+
+    top.addEventListener("mousedown", e => {
+        e.preventDefault();
+        e.stopPropagation();
+    });
+
+    top.addEventListener("click", e => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (opt.enabled === false) return;
+        if (e.target === checkHit || checkHit.contains(e.target)) return;
+        if (e.target === expandBtn || expandBtn.contains(e.target)) return;
+
+        opt.expanded = !opt.expanded;
+        wrap.classList.toggle("expanded", !!opt.expanded);
+        expandBtn.classList.toggle("expanded", !!opt.expanded);
+        childrenWrap.style.display = opt.expanded ? "" : "none";
+    });
+
+    wrap.classList.toggle("expanded", !!opt.expanded);
+    wrap.append(top, childrenWrap);
+
+    return wrap;
+}
+
 export function updateRegularChecks(menuEl, settingsOptions) {
     if (!menuEl) return;
 
@@ -61,6 +181,50 @@ export function updateRegularChecks(menuEl, settingsOptions) {
         if (check) {
             check.classList.toggle("checked", !!opt?.checked);
         }
+    });
+}
+
+export function updateCheckboxGroupItems(menuEl, settingsOptions) {
+    if (!menuEl) return;
+
+    const blocks = menuEl.querySelectorAll(".settingsGroupBlock[data-setting-index]");
+    blocks.forEach(block => {
+        const index = Number(block.dataset.settingIndex);
+        const opt = settingsOptions[index];
+        if (!opt) return;
+
+        const top = block.querySelector(".settingsGroupToggle");
+        const check = block.querySelector(".settingsGroupCheck");
+        const label = block.querySelector(".settingsMenuLabel");
+        const expandBtn = block.querySelector(".settingsGroupExpand");
+        const childrenWrap = block.querySelector(".settingsGroupChildren");
+
+        block.classList.toggle("expanded", !!opt.expanded);
+        if (top) top.classList.toggle("disabled", opt.enabled === false);
+        if (check) {
+            check.classList.toggle("checked", !!opt.checked);
+            check.classList.toggle("disabled", opt.enabled === false);
+        }
+        if (label) {
+            label.classList.toggle("disabled", opt.enabled === false);
+        }
+        if (expandBtn) {
+            expandBtn.classList.toggle("expanded", !!opt.expanded);
+            expandBtn.disabled = opt.enabled === false;
+        }
+        if (childrenWrap) {
+            childrenWrap.style.display = opt.expanded ? "" : "none";
+        }
+
+        const childItems = block.querySelectorAll(".settingsGroupChild[data-child-index]");
+        childItems.forEach(childItem => {
+            const childIndex = Number(childItem.dataset.childIndex);
+            const childOpt = opt.children?.[childIndex];
+            const childCheck = childItem.querySelector(".settingsGroupChildCheck");
+            if (childCheck) {
+                childCheck.classList.toggle("checked", !!childOpt?.checked);
+            }
+        });
     });
 }
 

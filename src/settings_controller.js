@@ -16,7 +16,9 @@ import {
 import {
     buildCategory,
     buildRegularItem,
+    buildCheckboxGroupItem,
     updateRegularChecks,
+    updateCheckboxGroupItems,
     updateManualMappingUI as updateManualMappingUIImpl,
     pulseManualFieldError as pulseManualFieldErrorImpl,
     createManualMappingMenuUI
@@ -127,6 +129,26 @@ export function attachSettingsController({
         );
     }
 
+    function syncVelocityMinimaSetting() {
+        const opt = settingsOptions.find(o => o.label === "Show velocity minima");
+        if (!opt) return;
+
+        const available = !!AppState.overlays?.velocityMinima?.available;
+        const display = AppState.display?.velocityMinima;
+
+        opt.enabled = available;
+        opt.checked = !!display?.enabled;
+
+        if (!available) {
+            opt.expanded = false;
+        }
+
+        if (Array.isArray(opt.children) && opt.children.length >= 2) {
+            opt.children[0].checked = !!display?.showXY;
+            opt.children[1].checked = !!display?.showTimeBar;
+        }
+    }
+
     function positionMenu() {
         if (!menuEl) return;
 
@@ -164,7 +186,10 @@ export function attachSettingsController({
             return;
         }
 
-        if (opt.label === "Show lifts") {
+        if (
+            opt.label === "Show lifts" ||
+            opt.label === "Show velocity minima"
+        ) {
             resetXYSelection();
             renderers.redrawXY();
             renderers.redrawTimeBar();
@@ -178,19 +203,58 @@ export function attachSettingsController({
         rerunLoad();
         syncAutoFieldsFromDetected();
         validateManualMappings();
+        syncVelocityMinimaSetting();
         updateManualMappingUI();
+        updateRegularChecks(menuEl, settingsOptions);
+        updateCheckboxGroupItems(menuEl, settingsOptions);
         updateTitleBarSettingsError();
     }
 
     function toggleOption(index) {
         const opt = settingsOptions[index];
         if (!opt) return;
+        if (opt.enabled === false) return;
 
         opt.checked = !opt.checked;
+
+        if (opt.label === "Show velocity minima") {
+            AppState.display.velocityMinima.enabled = !!opt.checked;
+            if (opt.checked) opt.expanded = true;
+
+            updateRegularChecks(menuEl, settingsOptions);
+            updateCheckboxGroupItems(menuEl, settingsOptions);
+            applySettingChange(opt);
+            return;
+        }
+
         if (opt.checked) opt.expanded = true;
 
         updateRegularChecks(menuEl, settingsOptions);
+        updateCheckboxGroupItems(menuEl, settingsOptions);
         applySettingChange(opt);
+    }
+
+    function toggleChildOption(index, childIndex) {
+        const opt = settingsOptions[index];
+        if (!opt || opt.enabled === false) return;
+
+        const child = opt.children?.[childIndex];
+        if (!child) return;
+
+        child.checked = !child.checked;
+
+        if (opt.label === "Show velocity minima") {
+            if (childIndex === 0) {
+                AppState.display.velocityMinima.showXY = !!child.checked;
+            } else if (childIndex === 1) {
+                AppState.display.velocityMinima.showTimeBar = !!child.checked;
+            }
+
+            updateCheckboxGroupItems(menuEl, settingsOptions);
+            resetXYSelection();
+            renderers.redrawXY();
+            renderers.redrawTimeBar();
+        }
     }
 
     function closeSuggestionList() {
@@ -290,6 +354,7 @@ export function attachSettingsController({
         syncManualMappingPreviewFromDetected();
         validateManualMappings();
         updateTitleBarSettingsError();
+        syncVelocityMinimaSetting();
 
         menuEl = document.createElement("div");
         menuEl.className = "settingsMenu";
@@ -301,6 +366,10 @@ export function attachSettingsController({
         settingsOptions.forEach((opt, index) => {
             if (opt.label === "Show lifts") {
                 menuEl.appendChild(buildRegularItem(opt, index, toggleOption));
+            } else if (opt.label === "Show velocity minima") {
+                menuEl.appendChild(
+                    buildCheckboxGroupItem(opt, index, toggleOption, toggleChildOption)
+                );
             }
         });
 
@@ -325,6 +394,8 @@ export function attachSettingsController({
         positionMenu();
         scaleController.updateScaleUI();
         updateManualMappingUI();
+        updateRegularChecks(menuEl, settingsOptions);
+        updateCheckboxGroupItems(menuEl, settingsOptions);
         titleBarController.setSettingsMenuOpen(true);
 
         docMouseDown = e => {
@@ -370,6 +441,7 @@ export function attachSettingsController({
     });
 
     validateManualMappings();
+    syncVelocityMinimaSetting();
     updateTitleBarSettingsError();
 
     return {
