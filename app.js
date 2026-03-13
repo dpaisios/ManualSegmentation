@@ -374,9 +374,6 @@ attachSettingsController({
     AppState,
     settingsOptions,
     loadData,
-    originalRaw,
-    colNamesOverrideGlobal,
-    exportPathOverrideGlobal,
     resetXYSelection: () => xyController.resetSelection(),
     renderers,
 

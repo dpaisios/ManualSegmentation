@@ -118,6 +118,8 @@ export function updateManualMappingUI({
         input.title = String(mm.errors[key] ?? "");
         input.disabled = !mm.enabled;
 
+        input.classList.remove("state-auto", "state-valid", "state-warning", "state-invalid");
+
         input.classList.toggle("state-auto", mm.status[key] === "auto");
         input.classList.toggle("state-valid", mm.status[key] === "valid");
         input.classList.toggle("state-warning", mm.status[key] === "warning");
@@ -346,7 +348,26 @@ export function createManualMappingMenuUI({
             if (!["X", "Y", "Z", "t", "P"].includes(key)) return;
 
             const mm2 = getManualMapping();
+            const isActiveAuto = mm2.status[key] === "auto";
 
+            // If already in auto mode: deactivate auto and clear the field
+            if (isActiveAuto) {
+                mm2.fields[key] = "";
+                mm2.resolved[key] = null;
+                mm2.errors[key] = "";
+                mm2.status[key] = "empty";
+                mm2.meta[key] = {
+                    source: null,
+                    columnIndex: null
+                };
+
+                validateManualMappings();
+                updateManualMappingUI();
+                applyManualMappingChange();
+                return;
+            }
+
+            // Otherwise activate auto mode
             mm2.fields[key] = "";
             mm2.resolved[key] = null;
             mm2.errors[key] = "";

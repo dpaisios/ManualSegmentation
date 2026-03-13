@@ -4,7 +4,8 @@
 // -------------------------------------------------------------
 import {
     originalRaw as liveOriginalRaw,
-    colNamesOverrideGlobal as liveColNamesOverrideGlobal
+    colNamesOverrideGlobal as liveColNamesOverrideGlobal,
+    exportPathOverrideGlobal as liveExportPathOverrideGlobal
 } from "./load_data.js";
 
 import { createScaleController } from "./settings_scale.js";
@@ -142,9 +143,9 @@ export function attachSettingsController({
         if (!AppState.dataLoaded) return;
 
         loadData(
-            originalRaw,
-            colNamesOverrideGlobal,
-            exportPathOverrideGlobal,
+            liveOriginalRaw,
+            liveColNamesOverrideGlobal,
+            liveExportPathOverrideGlobal,
             settingsOptions
         );
 
