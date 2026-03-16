@@ -58,15 +58,35 @@ export function buildCheckboxGroupItem(opt, index, toggleOption, toggleChildOpti
     top.className = "settingsMenuItem settingsGroupToggle";
     if (opt.enabled === false) top.classList.add("disabled");
 
-    const check = document.createElement("span");
-    check.className = "settingsMenuCheck settingsGroupCheck";
-    if (opt.checked) check.classList.add("checked");
-    if (opt.enabled === false) check.classList.add("disabled");
+    const isExpandableOnly = opt.label === "Tip source";
 
-    const checkHit = document.createElement("button");
-    checkHit.type = "button";
-    checkHit.className = "settingsCheckHit";
-    checkHit.appendChild(check);
+    let checkHit = null;
+
+    if (!isExpandableOnly) {
+        const check = document.createElement("span");
+        check.className = "settingsMenuCheck settingsGroupCheck";
+        if (opt.checked) check.classList.add("checked");
+        if (opt.enabled === false) check.classList.add("disabled");
+
+        checkHit = document.createElement("button");
+        checkHit.type = "button";
+        checkHit.className = "settingsCheckHit";
+        checkHit.appendChild(check);
+
+        top.appendChild(checkHit);
+
+        checkHit.addEventListener("mousedown", e => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        checkHit.addEventListener("click", e => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (opt.enabled === false) return;
+            toggleOption(index);
+        });
+    }
 
     const label = document.createElement("span");
     label.className = "settingsMenuLabel";
@@ -80,7 +100,7 @@ export function buildCheckboxGroupItem(opt, index, toggleOption, toggleChildOpti
     expandBtn.disabled = opt.enabled === false;
     if (opt.expanded) expandBtn.classList.add("expanded");
 
-    top.append(checkHit, label, expandBtn);
+    top.append(label, expandBtn);
 
     const childrenWrap = document.createElement("div");
     childrenWrap.className = "settingsGroupChildren";
@@ -117,18 +137,6 @@ export function buildCheckboxGroupItem(opt, index, toggleOption, toggleChildOpti
         childrenWrap.appendChild(childItem);
     });
 
-    checkHit.addEventListener("mousedown", e => {
-        e.preventDefault();
-        e.stopPropagation();
-    });
-
-    checkHit.addEventListener("click", e => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (opt.enabled === false) return;
-        toggleOption(index);
-    });
-
     expandBtn.addEventListener("mousedown", e => {
         e.preventDefault();
         e.stopPropagation();
@@ -154,7 +162,7 @@ export function buildCheckboxGroupItem(opt, index, toggleOption, toggleChildOpti
         e.stopPropagation();
 
         if (opt.enabled === false) return;
-        if (e.target === checkHit || checkHit.contains(e.target)) return;
+        if (checkHit && (e.target === checkHit || checkHit.contains(e.target))) return;
         if (e.target === expandBtn || expandBtn.contains(e.target)) return;
 
         opt.expanded = !opt.expanded;
@@ -199,19 +207,25 @@ export function updateCheckboxGroupItems(menuEl, settingsOptions) {
         const expandBtn = block.querySelector(".settingsGroupExpand");
         const childrenWrap = block.querySelector(".settingsGroupChildren");
 
+        const isExpandableOnly = opt.label === "Tip source";
+
         block.classList.toggle("expanded", !!opt.expanded);
         if (top) top.classList.toggle("disabled", opt.enabled === false);
+
         if (check) {
-            check.classList.toggle("checked", !!opt.checked);
+            check.classList.toggle("checked", !isExpandableOnly && !!opt.checked);
             check.classList.toggle("disabled", opt.enabled === false);
         }
+
         if (label) {
             label.classList.toggle("disabled", opt.enabled === false);
         }
+
         if (expandBtn) {
             expandBtn.classList.toggle("expanded", !!opt.expanded);
             expandBtn.disabled = opt.enabled === false;
         }
+
         if (childrenWrap) {
             childrenWrap.style.display = opt.expanded ? "" : "none";
         }
@@ -221,6 +235,7 @@ export function updateCheckboxGroupItems(menuEl, settingsOptions) {
             const childIndex = Number(childItem.dataset.childIndex);
             const childOpt = opt.children?.[childIndex];
             const childCheck = childItem.querySelector(".settingsGroupChildCheck");
+
             if (childCheck) {
                 childCheck.classList.toggle("checked", !!childOpt?.checked);
             }

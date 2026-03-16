@@ -280,7 +280,17 @@ export function loadData(
         }
     }
 
-    computeTipSeg(data);
+    const tipSourceOpt = settingsOptions?.find(o => o.label === "Tip source");
+
+    let tipSource = "P";
+
+    if (tipSourceOpt?.children) {
+        const zOpt = tipSourceOpt.children.find(c => c.label === "Z");
+        if (zOpt?.checked) tipSource = "Z";
+    }
+
+    computeTipSeg(data, tipSource);
+
     timeNormalization(data);
 
     if (settingsOptions?.find(o => o.label === "Remove last stroke")?.checked) {

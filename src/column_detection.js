@@ -80,7 +80,7 @@ export function detectColumns(data, colNames, manualOverrides = null) {
     let X_col    = findCol(colNames, ["x","X"]);
     let Y_col    = findCol(colNames, ["y","Y"]);
     let Z_col    = findCol(colNames, ["z","Z"]);
-    let t_col    = findCol(colNames, ["t","T","Time_MS","time","Time","device_time"]);
+    let t_col    = findCol(colNames, ["device_time","t","T","Time_MS","time","Time"]);
     let P_col    = findCol(colNames, ["P","pressure","Pressure"]);
     let idx_col  = findCol(colNames, ["index","Index","ind","Ind",
         "eventid","eventID","eventId","EventID","EventId","Eventid",
@@ -150,7 +150,7 @@ export function detectColumns(data, colNames, manualOverrides = null) {
 
     if (!missing) {
         // fully detected by names/manual mapping -> filter on X/Y/Z/t/P and return
-        data = filterNegativeOnFoundCols(data, found, colNames, ["X", "Y", "Z", "t", "P"]);
+        data = filterNegativeOnFoundCols(data, found, colNames, ["X", "Y", "Z", "P"]);
         return {
             detectedCols: found,
             processedData: data
@@ -371,13 +371,20 @@ export function buildCanonicalFields(data, detectedCols, colNames) {
 // -------------------------------------------------------------
 // Recompute Tip + TipSeg from canonical P
 // -------------------------------------------------------------
-export function computeTipSeg(data) {
+export function computeTipSeg(data, source = "P") {
     for (const r of data) {
-        r.Tip = (r.P != null && r.P > 0) ? 1 : 0;
+        if (source === "Z") {
+            r.Tip = (r.Z != null && r.Z === 0) ? 1 : 0;
+        } else {
+            r.Tip = (r.P != null && r.P > 0) ? 1 : 0;
+        }
     }
+
     const vec = data.map(r => r.Tip);
     const seg = rleidJS(vec);
-    seg.forEach((ts,i) => data[i].Tip_seg = ts);
+    seg.forEach((ts, i) => {
+        data[i].Tip_seg = ts;
+    });
 }
 
 // -------------------------------------------------------------

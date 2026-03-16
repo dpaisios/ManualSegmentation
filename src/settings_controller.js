@@ -210,7 +210,8 @@ export function attachSettingsController({
         if (
             opt.label === "Remove edge lifts" ||
             opt.label === "Remove last stroke" ||
-            opt.label === "Scale multiplier"
+            opt.label === "Scale multiplier" ||
+            opt.label === "Tip source"
         ) {
             rerunLoad();
             return;
@@ -244,6 +245,13 @@ export function attachSettingsController({
         if (!opt) return;
         if (opt.enabled === false) return;
 
+        if (opt.label === "Tip source") {
+            opt.expanded = !opt.expanded;
+            updateRegularChecks(menuEl, settingsOptions);
+            updateCheckboxGroupItems(menuEl, settingsOptions);
+            return;
+        }
+
         opt.checked = !opt.checked;
 
         if (opt.label === "Show velocity minima") {
@@ -269,6 +277,42 @@ export function attachSettingsController({
 
         const child = opt.children?.[childIndex];
         if (!child) return;
+
+        if (opt.label === "Tip source") {
+            if (!Array.isArray(opt.children) || opt.children.length < 2) return;
+
+            const currentIndex = opt.children.findIndex(c => c.checked);
+            if (currentIndex === childIndex) {
+                return;
+            }
+
+            const hasSelections =
+                Array.isArray(AppState.selections) &&
+                AppState.selections.length > 0;
+
+            if (hasSelections) {
+                const ok = window.confirm(
+                    "Changing the Tip source will discard your current selections.\n\n" +
+                    "Do you want to continue?"
+                );
+
+                if (!ok) {
+                    updateCheckboxGroupItems(menuEl, settingsOptions);
+                    return;
+                }
+
+                AppState.selections = [];
+                AppState.selectionsVersion++;
+            }
+
+            opt.children.forEach((c, i) => {
+                c.checked = (i === childIndex);
+            });
+
+            updateCheckboxGroupItems(menuEl, settingsOptions);
+            applySettingChange(opt);
+            return;
+        }
 
         child.checked = !child.checked;
 
@@ -389,6 +433,13 @@ export function attachSettingsController({
 
         menuEl.appendChild(buildCategory("Variables"));
         menuEl.appendChild(buildManualMappingSection());
+        settingsOptions.forEach((opt, index) => {
+            if (opt.label === "Tip source") {
+                menuEl.appendChild(
+                    buildCheckboxGroupItem(opt, index, toggleOption, toggleChildOption)
+                );
+            }
+        });
 
         menuEl.appendChild(buildCategory("Display"));
         settingsOptions.forEach((opt, index) => {

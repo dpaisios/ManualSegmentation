@@ -78,6 +78,15 @@ let settingsOptions = [
         xValue: 1,
         yValue: 1,
         error: ""
+    },
+    {
+        label: "Tip source",
+        checked: false,
+        expanded: false,
+        children: [
+            { label: "P", checked: true },
+            { label: "Z", checked: false }
+        ]
     }
 ];
 
