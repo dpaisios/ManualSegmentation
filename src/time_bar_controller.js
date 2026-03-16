@@ -371,8 +371,7 @@ export function attachTimeBarController({
                     T
                 );
 
-                setSelections(next);
-                ID.recomputeAutoIDs(next);
+                setSelections(ID.withRecomputedAutoIDs(next));
 
                 exitSplitMode();
                 clearDragState();
@@ -476,8 +475,7 @@ export function attachTimeBarController({
             hitTestClusterDelete(ctx, x, y, deleteTarget, T, canvas.width, canvas.height)
         ) {
             const next = Select.deleteSelection(deleteTarget, selections);
-            setSelections(next);
-            ID.recomputeAutoIDs(next);
+            setSelections(ID.withRecomputedAutoIDs(next));
 
             clearDragState();
             // DO NOT clearHoverState() here: prevents bubble blink
@@ -493,10 +491,13 @@ export function attachTimeBarController({
             if ((sel.bubbleAlpha ?? 0) <= 0.01) continue;
 
             if (hitTestClusterFlag(ctx, x, y, sel, T, canvas.width, canvas.height)) {
-                sel.flagged = !sel.flagged;
-
-                // bump version (via app.js setSelections hook)
-                setSelections([...selections]);
+                setSelections(
+                    Select.updateSelection(
+                        selections,
+                        sel,
+                        { flagged: !sel.flagged }
+                    )
+                );
 
                 deleteTarget = sel;
                 renderers.requestFull();
@@ -1080,7 +1081,7 @@ export function attachTimeBarController({
             );
 
             if (next !== selections) {
-                setSelections(next);
+                setSelections(ID.withRecomputedAutoIDs(next));
             }
 
             draggingMerge = false;
@@ -1110,9 +1111,22 @@ export function attachTimeBarController({
                     : null;
 
             if (preview?.sel) {
-                draggingStartHandle.i0 = preview.sel.i0;
-                draggingStartHandle.i1 = preview.sel.i1;
-                Select.syncSelectionToIndices(draggingStartHandle, T);
+                const updated = Select.syncSelectionToIndices(
+                    {
+                        ...draggingStartHandle,
+                        i0: preview.sel.i0,
+                        i1: preview.sel.i1
+                    },
+                    T
+                );
+
+                setSelections(
+                    Select.updateSelection(
+                        selections,
+                        draggingStartHandle,
+                        updated
+                    )
+                );
             }
         }
 
@@ -1125,9 +1139,22 @@ export function attachTimeBarController({
                     : null;
 
             if (preview?.sel) {
-                draggingEndHandle.i0 = preview.sel.i0;
-                draggingEndHandle.i1 = preview.sel.i1;
-                Select.syncSelectionToIndices(draggingEndHandle, T);
+                const updated = Select.syncSelectionToIndices(
+                    {
+                        ...draggingEndHandle,
+                        i0: preview.sel.i0,
+                        i1: preview.sel.i1
+                    },
+                    T
+                );
+
+                setSelections(
+                    Select.updateSelection(
+                        selections,
+                        draggingEndHandle,
+                        updated
+                    )
+                );
             }
         }
 
@@ -1146,7 +1173,7 @@ export function attachTimeBarController({
                 tempSelection.i1,
                 T
             );
-            setSelections(next);
+            setSelections(ID.withRecomputedAutoIDs(next));
         }
 
         // -------------------------------------------------

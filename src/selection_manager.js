@@ -9,6 +9,13 @@ export function deleteSelection(target, selections) {
     return selections.filter(s => s !== target);
 }
 
+export function updateSelection(selections, target, patch) {
+    return selections.map(s =>
+        s === target
+            ? { ...s, ...patch }
+            : s
+    );
+}
 // Selection creation & merge semantics
 
 function overlaps(a0, a1, b0, b1) {
@@ -265,8 +272,7 @@ export function addOrMergeSelectionRange(selections, tStart, tEnd, T = null) {
     for (const sel of selections) {
         const s = getSelectionRange(sel, T);
         if (containedIn(r0, r1, s.a0, s.a1)) {
-            ID.recomputeAutoIDs(selections);
-            return selections;
+            return ID.withRecomputedAutoIDs(selections);
         }
     }
 
@@ -285,8 +291,7 @@ export function addOrMergeSelectionRange(selections, tStart, tEnd, T = null) {
     // no overlap → new selection
     if (overlapping.length === 0) {
         const next = [...selections, selectionFromTimes(tStart, tEnd, T)];
-        ID.recomputeAutoIDs(next);
-        return next;
+        return ID.withRecomputedAutoIDs(next);
     }
 
     // merge overlaps
@@ -308,21 +313,30 @@ export function addOrMergeSelectionRange(selections, tStart, tEnd, T = null) {
         merged1 = Math.max(merged1, s.a1);
     }
 
+    let updatedPrimary;
+
     if (Array.isArray(T) && T.length) {
-        primary.i0 = merged0;
-        primary.i1 = merged1;
-        syncSelectionToIndices(primary, T);
+        updatedPrimary = syncSelectionToIndices(
+            {
+                ...primary,
+                i0: merged0,
+                i1: merged1
+            },
+            T
+        );
     } else {
-        primary.t0 = merged0;
-        primary.t1 = merged1;
+        updatedPrimary = {
+            ...primary,
+            t0: merged0,
+            t1: merged1
+        };
     }
 
-    const next = selections.filter(
-        s => s === primary || !overlapping.includes(s)
-    );
+    const next = selections
+        .filter(s => s === primary || !overlapping.includes(s))
+        .map(s => s === primary ? updatedPrimary : s);
 
-    ID.recomputeAutoIDs(next);
-    return next;
+    return ID.withRecomputedAutoIDs(next);
 }
 
 export function addOrMergeSelectionIndexRange(selections, iStart, iEnd, T) {
@@ -336,8 +350,7 @@ export function addOrMergeSelectionIndexRange(selections, iStart, iEnd, T) {
     for (const sel of selections) {
         const s = getSelectionRange(sel, T);
         if (containedIn(r0, r1, s.a0, s.a1)) {
-            ID.recomputeAutoIDs(selections);
-            return selections;
+            return ID.withRecomputedAutoIDs(selections);
         }
     }
 
@@ -356,8 +369,7 @@ export function addOrMergeSelectionIndexRange(selections, iStart, iEnd, T) {
     // no overlap → new selection
     if (overlapping.length === 0) {
         const next = [...selections, selectionFromRange(r0, r1, T)];
-        ID.recomputeAutoIDs(next);
-        return next;
+        return ID.withRecomputedAutoIDs(next);
     }
 
     // merge overlaps
@@ -379,21 +391,30 @@ export function addOrMergeSelectionIndexRange(selections, iStart, iEnd, T) {
         merged1 = Math.max(merged1, s.a1);
     }
 
+    let updatedPrimary;
+
     if (Array.isArray(T) && T.length) {
-        primary.i0 = merged0;
-        primary.i1 = merged1;
-        syncSelectionToIndices(primary, T);
+        updatedPrimary = syncSelectionToIndices(
+            {
+                ...primary,
+                i0: merged0,
+                i1: merged1
+            },
+            T
+        );
     } else {
-        primary.t0 = merged0;
-        primary.t1 = merged1;
+        updatedPrimary = {
+            ...primary,
+            t0: merged0,
+            t1: merged1
+        };
     }
 
-    const next = selections.filter(
-        s => s === primary || !overlapping.includes(s)
-    );
+    const next = selections
+        .filter(s => s === primary || !overlapping.includes(s))
+        .map(s => s === primary ? updatedPrimary : s);
 
-    ID.recomputeAutoIDs(next);
-    return next;
+    return ID.withRecomputedAutoIDs(next);
 }
 
 export function addOrMergeSelectionRanges(selections, ranges, T = null) {
@@ -486,31 +507,44 @@ export function splitSelection(selections, targetSel, tSplit, T) {
     // right = [splitI ... i1]
     if (splitI <= base.a0 || splitI >= base.a1) return selections;
 
-    targetSel.i0 = base.a0;
-    targetSel.i1 = splitI;
-    syncSelectionToIndices(targetSel, T);
+    const updatedLeft = syncSelectionToIndices(
+        {
+            ...targetSel,
+            i0: base.a0,
+            i1: splitI
+        },
+        T
+    );
 
     const right = selectionFromIndices(splitI, base.a1, T);
     right.flagged = !!targetSel.flagged;
     right.comment = String(targetSel.comment ?? "");
 
-    if (targetSel.lockedID && targetSel.id != null && targetSel.id !== "") {
-        const root = String(targetSel.id);
-        targetSel.id = root + "_1";
-        targetSel.lockedID = true;
+    let finalLeft = updatedLeft;
+
+    if (updatedLeft.lockedID && updatedLeft.id != null && updatedLeft.id !== "") {
+        const root = String(updatedLeft.id);
+
+        finalLeft = {
+            ...updatedLeft,
+            id: root + "_1",
+            lockedID: true
+        };
 
         right.id = root + "_2";
         right.lockedID = true;
     }
 
-    const next = [...selections, right].sort((a, b) => {
-        const ra = getSelectionRange(a, T);
-        const rb = getSelectionRange(b, T);
-        return (ra.a0 - rb.a0) || (ra.a1 - rb.a1);
-    });
+    const next = selections
+        .map(s => s === targetSel ? finalLeft : s)
+        .concat(right)
+        .sort((a, b) => {
+            const ra = getSelectionRange(a, T);
+            const rb = getSelectionRange(b, T);
+            return (ra.a0 - rb.a0) || (ra.a1 - rb.a1);
+        });
 
-    ID.recomputeAutoIDs(next);
-    return next;
+    return ID.withRecomputedAutoIDs(next);
 }
 
 export function mergeSelectionsByEnvelope(
@@ -549,36 +583,60 @@ export function mergeSelectionsByEnvelope(
             ? mergeSource
             : overlapping[0];
 
+    let updatedPrimary;
+
     if (Array.isArray(T) && T.length) {
-        primary.i0 = merged0;
-        primary.i1 = merged1;
-        syncSelectionToIndices(primary, T);
+        updatedPrimary = syncSelectionToIndices(
+            {
+                ...primary,
+                i0: merged0,
+                i1: merged1
+            },
+            T
+        );
     } else {
-        primary.t0 = merged0;
-        primary.t1 = merged1;
+        updatedPrimary = {
+            ...primary,
+            t0: merged0,
+            t1: merged1
+        };
     }
 
-    const next = selections.filter(
-        s => s === primary || !overlapping.includes(s)
-    );
+    let next = selections
+        .filter(s => s === primary || !overlapping.includes(s))
+        .map(s => s === primary ? updatedPrimary : s);
 
-    if (primary.lockedID) {
-        for (const s of next) {
-            if (s === primary) continue;
-            s.id       = primary.id;
-            s.lockedID = true;
-        }
+    if (updatedPrimary.lockedID) {
+        next = next.map(s => {
+            if (s === updatedPrimary) return s;
+
+            return {
+                ...s,
+                id: updatedPrimary.id,
+                lockedID: true
+            };
+        });
     } else {
-        ID.recomputeAutoIDs(next);
+        next = ID.withRecomputedAutoIDs(next);
     }
 
     const anyFlagged = overlapping.some(s => !!s.flagged);
-    primary.flagged = anyFlagged;
+
+    next = next.map(s =>
+        s === updatedPrimary
+            ? { ...s, flagged: anyFlagged }
+            : s
+    );
 
     const anyComment =
         overlapping.map(s => String(s.comment ?? "").trim()).find(s => s.length) ?? "";
-    if (!String(primary.comment ?? "").trim() && anyComment) {
-        primary.comment = anyComment;
+    if (anyComment) {
+        next = next.map(s =>
+            s === updatedPrimary &&
+            !String(s.comment ?? "").trim()
+                ? { ...s, comment: anyComment }
+                : s
+        );
     }
 
     return next;

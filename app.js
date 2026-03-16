@@ -36,6 +36,8 @@ import { createExportSuccessAnimator } from "./src/settings_controller.js";
 
 import { createCommentEditor, isEditingComment } from "./src/comment_editor.js";
 
+import * as Select from "./src/selection_manager.js";
+
 // -------------------------------------------------------------
 // Canvases
 // -------------------------------------------------------------
@@ -375,12 +377,21 @@ const labelEditor = createLabelEditor({
         const prev = String(sel.id ?? "");
 
         if (value !== "" && value !== prev) {
-            sel.id = value;
-            sel.lockedID = true;
+            AppState.selections =
+                Select.updateSelection(
+                    AppState.selections,
+                    sel,
+                    {
+                        id: value,
+                        lockedID: true
+                    }
+                );
+
             AppState.selectionsVersion++;
         }
 
-        ID.recomputeAutoIDs(AppState.selections);
+        AppState.selections =
+            ID.withRecomputedAutoIDs(AppState.selections);
         renderers.requestTimeBar();
     },
     onCancel: () => renderers.requestTimeBar()
@@ -396,7 +407,13 @@ const commentEditor = createCommentEditor({
         const prev = String(sel.comment ?? "");
 
         if (v !== prev) {
-            sel.comment = v;
+            AppState.selections =
+                Select.updateSelection(
+                    AppState.selections,
+                    sel,
+                    { comment: v }
+                );
+
             AppState.selectionsVersion++;
         }
 
