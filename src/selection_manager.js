@@ -140,93 +140,33 @@ export function selectionFromIndices(i0, i1, T) {
     return syncSelectionToIndices(sel, T);
 }
 
-function selectionFromRange(a0, a1, T = null) {
-    if (Array.isArray(T) && T.length) {
-        return selectionFromIndices(a0, a1, T);
-    }
-
-    return {
-        t0: Math.min(a0, a1),
-        t1: Math.max(a0, a1),
-        i0: null,
-        i1: null,
-        id: null,
-        lockedID: false,
-        bubbleAlpha: 0,
-        flagged: false,
-        comment: ""
-    };
-}
-
-function selectionFromTimes(t0, t1, T = null) {
-    if (Array.isArray(T) && T.length) {
-        const leftT  = Math.min(t0, t1);
-        const rightT = Math.max(t0, t1);
-
-        const i0 = resolveLeftBoundaryIndex(T, leftT);
-        const i1 = resolveRightBoundaryIndex(T, rightT);
-
-        return selectionFromIndices(i0, i1, T);
-    }
-
-    return {
-        t0: Math.min(t0, t1),
-        t1: Math.max(t0, t1),
-        i0: null,
-        i1: null,
-        id: null,
-        lockedID: false,
-        bubbleAlpha: 0,
-        flagged: false,
-        comment: ""
-    };
-}
-
-function getSelectionRange(sel, T = null) {
+function getSelectionRange(sel, T) {
     if (sel && Number.isFinite(sel.i0) && Number.isFinite(sel.i1)) {
-        return { a0: sel.i0, a1: sel.i1, mode: "index" };
+        return { a0: sel.i0, a1: sel.i1};
     }
 
-    if (Array.isArray(T) && T.length && sel) {
-        const leftT  = Math.min(sel.t0, sel.t1);
-        const rightT = Math.max(sel.t0, sel.t1);
+    const leftT  = Math.min(sel.t0, sel.t1);
+    const rightT = Math.max(sel.t0, sel.t1);
 
-        const i0 = resolveLeftBoundaryIndex(T, leftT);
-        const i1 = resolveRightBoundaryIndex(T, rightT);
-
-        return {
-            a0: Math.min(i0, i1),
-            a1: Math.max(i0, i1),
-            mode: "index"
-        };
-    }
+    const i0 = resolveLeftBoundaryIndex(T, leftT);
+    const i1 = resolveRightBoundaryIndex(T, rightT);
 
     return {
-        a0: Math.min(sel.t0, sel.t1),
-        a1: Math.max(sel.t0, sel.t1),
-        mode: "time"
+        a0: Math.min(i0, i1),
+        a1: Math.max(i0, i1)
     };
 }
 
-function getInputRange(v0, v1, T = null) {
-    if (Array.isArray(T) && T.length) {
-        const leftT  = Math.min(v0, v1);
-        const rightT = Math.max(v0, v1);
+function getInputRange(v0, v1, T) {
+    const leftT  = Math.min(v0, v1);
+    const rightT = Math.max(v0, v1);
 
-        const i0 = resolveLeftBoundaryIndex(T, leftT);
-        const i1 = resolveRightBoundaryIndex(T, rightT);
-
-        return {
-            a0: Math.min(i0, i1),
-            a1: Math.max(i0, i1),
-            mode: "index"
-        };
-    }
+    const i0 = resolveLeftBoundaryIndex(T, leftT);
+    const i1 = resolveRightBoundaryIndex(T, rightT);
 
     return {
-        a0: Math.min(v0, v1),
-        a1: Math.max(v0, v1),
-        mode: "time"
+        a0: Math.min(i0, i1),
+        a1: Math.max(i0, i1)
     };
 }
 
@@ -234,8 +174,7 @@ function getInputIndexRange(i0, i1, T) {
     if (!Array.isArray(T) || !T.length) {
         return {
             a0: Math.min(i0, i1),
-            a1: Math.max(i0, i1),
-            mode: "time"
+            a1: Math.max(i0, i1)
         };
     }
 
@@ -244,8 +183,7 @@ function getInputIndexRange(i0, i1, T) {
 
     return {
         a0: Math.min(a, b),
-        a1: Math.max(a, b),
-        mode: "index"
+        a1: Math.max(a, b)
     };
 }
 
@@ -256,87 +194,20 @@ export function applySelectionRanges({
     T = null
 }) {
     const current = getSelections() || [];
-    const next = addOrMergeSelectionRanges(current, ranges, T);
+    const next = addOrMergeSelectionIndexRanges(
+        current,
+        (ranges ?? []).map(r => {
+            if (!r) return r;
+
+            const i0 = resolveLeftBoundaryIndex(T, r.t0);
+            const i1 = resolveRightBoundaryIndex(T, r.t1);
+
+            return { i0, i1 };
+        }),
+        T
+    );
     setSelections(next);
     return next;
-}
-
-export function addOrMergeSelectionRange(selections, tStart, tEnd, T = null) {
-    const inRange = getInputRange(tStart, tEnd, T);
-    const r0 = inRange.a0;
-    const r1 = inRange.a1;
-
-    if (!(r1 > r0 || (inRange.mode === "index" && r1 >= r0))) return selections;
-
-    // fully contained → no-op
-    for (const sel of selections) {
-        const s = getSelectionRange(sel, T);
-        if (containedIn(r0, r1, s.a0, s.a1)) {
-            return ID.withRecomputedAutoIDs(selections);
-        }
-    }
-
-    // find overlaps
-    const overlapping = [];
-    for (const sel of selections) {
-        const s = getSelectionRange(sel, T);
-        if (
-            overlaps(r0, r1, s.a0, s.a1) ||
-            containedIn(s.a0, s.a1, r0, r1)
-        ) {
-            overlapping.push(sel);
-        }
-    }
-
-    // no overlap → new selection
-    if (overlapping.length === 0) {
-        const next = [...selections, selectionFromTimes(tStart, tEnd, T)];
-        return ID.withRecomputedAutoIDs(next);
-    }
-
-    // merge overlaps
-    overlapping.sort((a, b) => {
-        const ra = getSelectionRange(a, T);
-        const rb = getSelectionRange(b, T);
-        return (ra.a0 - rb.a0) || (ra.a1 - rb.a1);
-    });
-
-    const primary = overlapping[0];
-    const p = getSelectionRange(primary, T);
-
-    let merged0 = Math.min(p.a0, r0);
-    let merged1 = Math.max(p.a1, r1);
-
-    for (let i = 1; i < overlapping.length; i++) {
-        const s = getSelectionRange(overlapping[i], T);
-        merged0 = Math.min(merged0, s.a0);
-        merged1 = Math.max(merged1, s.a1);
-    }
-
-    let updatedPrimary;
-
-    if (Array.isArray(T) && T.length) {
-        updatedPrimary = syncSelectionToIndices(
-            {
-                ...primary,
-                i0: merged0,
-                i1: merged1
-            },
-            T
-        );
-    } else {
-        updatedPrimary = {
-            ...primary,
-            t0: merged0,
-            t1: merged1
-        };
-    }
-
-    const next = selections
-        .filter(s => s === primary || !overlapping.includes(s))
-        .map(s => s === primary ? updatedPrimary : s);
-
-    return ID.withRecomputedAutoIDs(next);
 }
 
 export function addOrMergeSelectionIndexRange(selections, iStart, iEnd, T) {
@@ -344,7 +215,7 @@ export function addOrMergeSelectionIndexRange(selections, iStart, iEnd, T) {
     const r0 = inRange.a0;
     const r1 = inRange.a1;
 
-    if (!(r1 > r0 || (inRange.mode === "index" && r1 >= r0))) return selections;
+    if (r1 < r0) return selections;
 
     // fully contained → no-op
     for (const sel of selections) {
@@ -368,7 +239,7 @@ export function addOrMergeSelectionIndexRange(selections, iStart, iEnd, T) {
 
     // no overlap → new selection
     if (overlapping.length === 0) {
-        const next = [...selections, selectionFromRange(r0, r1, T)];
+        const next = [...selections, selectionFromIndices(r0, r1, T)];
         return ID.withRecomputedAutoIDs(next);
     }
 
@@ -393,37 +264,20 @@ export function addOrMergeSelectionIndexRange(selections, iStart, iEnd, T) {
 
     let updatedPrimary;
 
-    if (Array.isArray(T) && T.length) {
-        updatedPrimary = syncSelectionToIndices(
-            {
-                ...primary,
-                i0: merged0,
-                i1: merged1
-            },
-            T
-        );
-    } else {
-        updatedPrimary = {
+    updatedPrimary = syncSelectionToIndices(
+        {
             ...primary,
-            t0: merged0,
-            t1: merged1
-        };
-    }
+            i0: merged0,
+            i1: merged1
+        },
+        T
+    );
 
     const next = selections
         .filter(s => s === primary || !overlapping.includes(s))
         .map(s => s === primary ? updatedPrimary : s);
 
     return ID.withRecomputedAutoIDs(next);
-}
-
-export function addOrMergeSelectionRanges(selections, ranges, T = null) {
-    let out = selections;
-    for (const r of ranges ?? []) {
-        if (!r) continue;
-        out = addOrMergeSelectionRange(out, r.t0, r.t1, T);
-    }
-    return out;
 }
 
 export function addOrMergeSelectionIndexRanges(selections, ranges, T) {
@@ -433,58 +287,6 @@ export function addOrMergeSelectionIndexRanges(selections, ranges, T) {
         out = addOrMergeSelectionIndexRange(out, r.i0, r.i1, T);
     }
     return out;
-}
-
-export function clampLeftHandle(selections, activeSel, proposedT0) {
-    const t1 = activeSel.t1;
-
-    let blockRight = -Infinity;
-    for (const sel of selections) {
-        if (sel !== activeSel && t1 > sel.t0 && proposedT0 < sel.t1) {
-            blockRight = Math.max(blockRight, sel.t1);
-        }
-    }
-
-    let t0 = proposedT0;
-    if (t0 < blockRight) t0 = blockRight;
-    if (t0 > t1)         t0 = t1;
-    return t0;
-}
-
-export function clampRightHandle(selections, activeSel, proposedT1) {
-    const t0 = activeSel.t0;
-
-    let blockLeft = Infinity;
-    for (const sel of selections) {
-        if (sel !== activeSel && proposedT1 > sel.t0 && t0 < sel.t1) {
-            blockLeft = Math.min(blockLeft, sel.t0);
-        }
-    }
-
-    let t1 = proposedT1;
-    if (t1 > blockLeft) t1 = blockLeft;
-    if (t1 < t0)        t1 = t0;
-    return t1;
-}
-
-export function clampNewSelectionTime(selections, tAnchor, tCurr) {
-    if (tCurr > tAnchor) {
-        let limitRight = Infinity;
-        for (const sel of selections) {
-            if (sel.t0 > tAnchor && tCurr > sel.t0) {
-                limitRight = Math.min(limitRight, sel.t0);
-            }
-        }
-        return Math.min(tCurr, limitRight);
-    } else {
-        let limitLeft = -Infinity;
-        for (const sel of selections) {
-            if (sel.t1 < tAnchor && tCurr < sel.t1) {
-                limitLeft = Math.max(limitLeft, sel.t1);
-            }
-        }
-        return Math.max(tCurr, limitLeft);
-    }
 }
 
 // -------------------------------------------------------------
@@ -558,7 +360,7 @@ export function mergeSelectionsByEnvelope(
     const a = env.a0;
     const b = env.a1;
 
-    if (!(b > a || (env.mode === "index" && b >= a))) return selections;
+    if (b < a) return selections;
 
     const overlapping = selections.filter(s => {
         const r = getSelectionRange(s, T);
@@ -594,12 +396,6 @@ export function mergeSelectionsByEnvelope(
             },
             T
         );
-    } else {
-        updatedPrimary = {
-            ...primary,
-            t0: merged0,
-            t1: merged1
-        };
     }
 
     let next = selections

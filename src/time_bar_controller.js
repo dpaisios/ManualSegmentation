@@ -13,7 +13,6 @@ import {
 
 import * as TB from "./time_bar.js";
 import * as Select from "./selection_manager.js";
-import * as ID from "./selection_ids.js";
 
 import {
     isEditingSelection,
@@ -371,7 +370,7 @@ export function attachTimeBarController({
                     T
                 );
 
-                setSelections(ID.withRecomputedAutoIDs(next));
+                setSelections(next);
 
                 exitSplitMode();
                 clearDragState();
@@ -475,7 +474,7 @@ export function attachTimeBarController({
             hitTestClusterDelete(ctx, x, y, deleteTarget, T, canvas.width, canvas.height)
         ) {
             const next = Select.deleteSelection(deleteTarget, selections);
-            setSelections(ID.withRecomputedAutoIDs(next));
+            setSelections(next);
 
             clearDragState();
             // DO NOT clearHoverState() here: prevents bubble blink
@@ -1081,7 +1080,7 @@ export function attachTimeBarController({
             );
 
             if (next !== selections) {
-                setSelections(ID.withRecomputedAutoIDs(next));
+                setSelections(next);
             }
 
             draggingMerge = false;
@@ -1173,7 +1172,7 @@ export function attachTimeBarController({
                 tempSelection.i1,
                 T
             );
-            setSelections(ID.withRecomputedAutoIDs(next));
+            setSelections(next);
         }
 
         // -------------------------------------------------

@@ -96,6 +96,11 @@ function smoothApproach(a, b, s = 0.2) {
     return a + (b - a) * s;
 }
 
+function commitSelections(nextSelections) {
+    AppState.selections = ID.withRecomputedAutoIDs(nextSelections);
+    AppState.selectionsVersion++;
+}
+
 // -------------------------------------------------------------
 // Title bar
 // -------------------------------------------------------------
@@ -377,7 +382,7 @@ const labelEditor = createLabelEditor({
         const prev = String(sel.id ?? "");
 
         if (value !== "" && value !== prev) {
-            AppState.selections =
+            commitSelections(
                 Select.updateSelection(
                     AppState.selections,
                     sel,
@@ -385,13 +390,9 @@ const labelEditor = createLabelEditor({
                         id: value,
                         lockedID: true
                     }
-                );
-
-            AppState.selectionsVersion++;
+                )
+            );
         }
-
-        AppState.selections =
-            ID.withRecomputedAutoIDs(AppState.selections);
         renderers.requestTimeBar();
     },
     onCancel: () => renderers.requestTimeBar()
@@ -407,14 +408,13 @@ const commentEditor = createCommentEditor({
         const prev = String(sel.comment ?? "");
 
         if (v !== prev) {
-            AppState.selections =
+            commitSelections(
                 Select.updateSelection(
                     AppState.selections,
                     sel,
                     { comment: v }
-                );
-
-            AppState.selectionsVersion++;
+                )
+            );
         }
 
         renderers.requestTimeBar();
@@ -429,10 +429,7 @@ const timeBarController = attachTimeBarController({
     canvas: timeCanvas,
     ctx: timeCtx,
     getSelections: () => AppState.selections,
-    setSelections: s => {
-        AppState.selections = s;
-        AppState.selectionsVersion++;
-    },
+    setSelections: commitSelections,
     T,
     Tip,
     labelEditor,
@@ -443,6 +440,7 @@ const timeBarController = attachTimeBarController({
 const xyController = attachXYController({
     canvas: xyCanvas,
     AppState,
+    setSelections: commitSelections,
     renderers,
     computeTimeRangesFromXYBox: box => {
         const visible = visibility.getVisibleIndices(X.length);

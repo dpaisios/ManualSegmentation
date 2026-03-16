@@ -12,12 +12,13 @@ const CORNER_TOL = 8;  // px hit tolerance for corners
 export function attachXYController({
     canvas,
     AppState,
+    setSelections,
     renderers,
     computeTimeRangesFromXYBox
 }) {
     let selecting = false;
     let dragMode  = null;
-    let hoverMode = null;
+    
     // "new"
     // "left" | "right" | "top" | "bottom"
     // "nw" | "ne" | "sw" | "se"
@@ -106,12 +107,9 @@ export function attachXYController({
 
         Select.applySelectionRanges({
             getSelections: () => AppState.selections,
-            setSelections: s => { AppState.selections = s; },
+            setSelections,
             ranges: tempTimeRanges
         });
-
-        // mark selections as dirty
-        AppState.selectionsVersion++;
 
         resetSelection();
         renderers.requestFull();
@@ -157,7 +155,6 @@ export function attachXYController({
     function resetSelection() {
         selecting = false;
         dragMode  = null;
-        hoverMode = null;
         selectBox = null;
         tempTimeRanges = [];
         canvas.style.cursor = "default";
@@ -170,7 +167,6 @@ export function attachXYController({
         if (!AppState.dataLoaded) return;
 
         const { x, y } = getCanvasCoords(e, canvas);
-        hoverMode = null;
 
         // Commit bubble click
         if (selectBox && selectBox._canCommit) {
@@ -218,26 +214,23 @@ export function attachXYController({
         if (!selecting && selectBox) {
             const corner = hitTestCorner(x, y, selectBox);
             if (corner) {
-                hoverMode = corner;
                 selectBox._hover = corner;
                 canvas.style.cursor = cursorForMode(corner);
-                renderers.redrawXY();
+                renderers.requestXY();
                 return;
             }
 
             const edge = hitTestEdges(x, y, selectBox);
             if (edge) {
-                hoverMode = edge;
                 selectBox._hover = edge;
                 canvas.style.cursor = cursorForMode(edge);
-                renderers.redrawXY();
+                renderers.requestXY();
                 return;
             }
 
-            hoverMode = null;
             selectBox._hover = null;
             canvas.style.cursor = "default";
-            renderers.redrawXY();
+            renderers.requestXY();
         }
 
         if (!selecting || !selectBox) return;
@@ -302,10 +295,9 @@ export function attachXYController({
 
     canvas.addEventListener("mouseleave", () => {
         if (!selecting) {
-            hoverMode = null;
             if (selectBox) selectBox._hover = null;
             canvas.style.cursor = "default";
-            renderers.redrawXY();
+            renderers.requestXY();
         }
     });
 

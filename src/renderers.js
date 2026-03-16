@@ -36,7 +36,7 @@ export function createRenderers({
     }
 
     function requestXY() {
-        xyPending = true;
+        xyPending ||= true;
         ensureRAF();
     }
 
@@ -53,10 +53,6 @@ export function createRenderers({
     }
 
     return {
-        redrawXY,
-        redrawTimeBar,
-        redrawSettings,
-
         redrawAll() {
             redrawXY();
             redrawTimeBar();
