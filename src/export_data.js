@@ -23,16 +23,23 @@ export function extractRowsForExport(originalRaw, selections, T, rowIds, rowIdCo
 
     const out = [];
 
-    // sort selections for stable IDs
-    const ordered = [...selections].sort((a, b) => a.t0 - b.t0);
+    // sort selections by index bounds for stable IDs
+    const ordered = [...selections].sort((a, b) => {
+        const a0 = Number.isFinite(a.i0) ? a.i0 : 0;
+        const b0 = Number.isFinite(b.i0) ? b.i0 : 0;
+        return a0 - b0;
+    });
 
     for (let i = 0; i < T.length; i++) {
-        const t = T[i];
-
         for (let s = 0; s < ordered.length; s++) {
             const sel = ordered[s];
 
-            if (t >= sel.t0 && t <= sel.t1) {
+            if (!Number.isFinite(sel.i0) || !Number.isFinite(sel.i1)) continue;
+
+            const i0 = Math.min(sel.i0, sel.i1);
+            const i1 = Math.max(sel.i0, sel.i1);
+
+            if (i >= i0 && i <= i1) {
                 const rid = String(rowIds[i]);
                 const rawRow = byId.get(rid);
 

@@ -63,6 +63,23 @@ function getActiveManualOverrides() {
     return any ? out : null;
 }
 
+function hasDuplicateTimestampsInData(data) {
+    if (!Array.isArray(data) || data.length < 2) return false;
+
+    const seen = new Set();
+
+    for (const row of data) {
+        const t = row?.t;
+
+        if (!Number.isFinite(t)) continue;
+
+        if (seen.has(t)) return true;
+        seen.add(t);
+    }
+
+    return false;
+}
+
 function buildVelocityMinimaOverlay(data, colNames) {
     const mm = AppState.manualMapping;
     const resolvedIdx = mm?.resolved?.v_pits;
@@ -274,6 +291,9 @@ export function loadData(
         data = removeEdgeLifts(data);
     }
 
+    AppState.dataQuality.hasDuplicateTimestamps =
+        hasDuplicateTimestampsInData(data);
+        
     const velocityMinimaOverlay = buildVelocityMinimaOverlay(data, colNames);
     
     X.length = 0;
@@ -318,6 +338,10 @@ export function resetLoaderState() {
     Tip.length = 0;
     TipSeg.length = 0;
     RowIDs.length = 0;
+
+    AppState.dataQuality.hasDuplicateTimestamps = false;
+    AppState.titleIssues = []; 
+
     AppState.overlays.velocityMinima = {
         available: false,
         source: null,

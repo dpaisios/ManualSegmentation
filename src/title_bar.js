@@ -16,8 +16,8 @@ export function attachTitleBar({
     let prevBtn = null;
     let onDocMouseDown = null;
     let settingsToggleHandler = null;
-    let settingsHasError = false;
-    let settingsErrorMessage = "";
+    let titleIssues = [];
+    let issuesTooltipEl = null;
 
     const left  = titleBarEl.querySelector(".title-left");
     const label = titleBarEl.querySelector(".title-label");
@@ -131,6 +131,94 @@ export function attachTitleBar({
     }
 
     // =========================================================
+    // STATUS BUTTON (errors / warnings)
+    // =========================================================
+    const statusBtn = document.createElement("button");
+    statusBtn.className = "title-status-btn";
+    statusBtn.title = "";
+
+    const statusIcon = document.createElement("span");
+    statusIcon.className = "title-icon title-status-icon";
+    statusBtn.appendChild(statusIcon);
+
+    statusBtn.dataset.state = "hidden";
+
+    function getIssueSeverity() {
+        if (!titleIssues.length) return null;
+        return titleIssues.some(i => i.level === "error") ? "error" : "warning";
+    }
+
+    function getIssuesTooltipText() {
+        return titleIssues.map(i => {
+            const level = i.level === "error" ? "Error" : "Warning";
+            return `${level}: ${i.message}`;
+        }).join("\n");
+    }
+
+    function closeIssuesTooltip() {
+        if (!issuesTooltipEl) return;
+        issuesTooltipEl.remove();
+        issuesTooltipEl = null;
+    }
+
+    function openIssuesTooltip() {
+        closeIssuesTooltip();
+        if (!titleIssues.length) return;
+
+        const r = statusBtn.getBoundingClientRect();
+
+        const tip = document.createElement("div");
+        tip.className = "titleIssuesTooltip";
+        tip.textContent = getIssuesTooltipText();
+
+        document.body.appendChild(tip);
+
+        const pad = 8;
+        const tipRect = tip.getBoundingClientRect();
+
+        let left = r.left + window.scrollX - 8;
+        const minLeft = window.scrollX + pad;
+        const maxLeft = window.scrollX + window.innerWidth - tipRect.width - pad;
+
+        if (left < minLeft) left = minLeft;
+        if (left > maxLeft) left = Math.max(minLeft, maxLeft);
+
+        tip.style.left = `${left}px`;
+        tip.style.top  = `${r.bottom + window.scrollY + 6}px`;
+
+        issuesTooltipEl = tip;
+    }
+
+    function updateStatusButton() {
+        const sev = getIssueSeverity();
+
+        closeIssuesTooltip();
+
+        if (sev === "error") {
+            statusBtn.dataset.state = "error";
+            statusBtn.style.display = "";
+            statusBtn.title = getIssuesTooltipText();
+        } else if (sev === "warning") {
+            statusBtn.dataset.state = "warning";
+            statusBtn.style.display = "";
+            statusBtn.title = getIssuesTooltipText();
+        } else {
+            statusBtn.dataset.state = "hidden";
+            statusBtn.style.display = "none";
+            statusBtn.title = "";
+        }
+    }
+
+    statusBtn.addEventListener("mouseenter", () => {
+        if (!titleIssues.length) return;
+        openIssuesTooltip();
+    });
+
+    statusBtn.addEventListener("mouseleave", () => {
+        closeIssuesTooltip();
+    });
+
+    // =========================================================
     // SETTINGS BUTTON
     // =========================================================
     const settingsBtn = document.createElement("button");
@@ -144,25 +232,12 @@ export function attachTitleBar({
     settingsBtn.dataset.state = "idle";
 
     settingsBtn.addEventListener("mouseenter", () => {
-        if (settingsHasError) {
-            settingsBtn.dataset.state = "hover-error";
-            settingsBtn.title = settingsErrorMessage || "Some variables could not be mapped";
-            return;
-        }
-
         if (settingsBtn.dataset.state !== "active") {
             settingsBtn.dataset.state = "hover";
         }
     });
 
     settingsBtn.addEventListener("mouseleave", () => {
-
-        if (settingsHasError) {
-            settingsBtn.dataset.state = "idle-error";
-            settingsBtn.title = "Settings";
-            return;
-        }
-
         if (settingsBtn.dataset.state !== "active") {
             settingsBtn.dataset.state = "idle";
         }
@@ -175,21 +250,7 @@ export function attachTitleBar({
     });
 
     function setSettingsMenuOpen(isOpen) {
-
-        if (settingsHasError) {
-            settingsBtn.dataset.state = isOpen
-                ? "hover-error"
-                : "idle-error";
-
-            settingsBtn.title = isOpen
-                ? (settingsErrorMessage || "Some variables could not be mapped")
-                : "Settings";
-
-            return;
-        }
-
-        settingsBtn.dataset.state =
-            isOpen ? "active" : "idle";
+        settingsBtn.dataset.state = isOpen ? "active" : "idle";
     }
 
     // =========================================================
@@ -213,6 +274,7 @@ export function attachTitleBar({
         titleBarEl.style.display = "flex";
         nav.innerHTML = "";
         prevBtn = null;
+        closeIssuesTooltip();
 
         if (!AppState.dataLoaded) {
             label.textContent = "";
@@ -222,9 +284,8 @@ export function attachTitleBar({
             closeDropdown();
 
             if (exportBtn.parentNode) exportBtn.remove();
-            if (settingsBtn.parentNode !== nav) {
-                nav.appendChild(settingsBtn);
-            }
+            nav.append(statusBtn, settingsBtn);
+            updateStatusButton();
 
             return;
         }
@@ -247,7 +308,8 @@ export function attachTitleBar({
                 left.insertBefore(exportBtn, label);
             }
 
-            nav.appendChild(settingsBtn);
+            nav.append(statusBtn, settingsBtn);
+            updateStatusButton();
             return;
         }
 
@@ -281,7 +343,8 @@ export function attachTitleBar({
         next.disabled = AppState.fileIndex >= AppState.fileList.length - 1;
         next.onclick = () => lifecycle?.nextFile();
 
-        nav.append(prev, next, settingsBtn);
+        nav.append(prev, next, statusBtn, settingsBtn);
+        updateStatusButton();
         prevBtn = prev;
 
         updateHitZone();
@@ -326,6 +389,7 @@ export function attachTitleBar({
         fileDropdown.remove();
         fileDropdown = null;
         arrow.classList.remove("open");
+        closeIssuesTooltip();
 
         if (onDocMouseDown) {
             document.removeEventListener("mousedown", onDocMouseDown, true);
@@ -498,19 +562,12 @@ export function attachTitleBar({
         updateTitleBar,
         setLifecycle,
 
-        setSettingsError(hasError, message = "") {
+        setTitleIssues(issues = []) {
+            titleIssues = Array.isArray(issues)
+                ? issues.filter(i => i && (i.level === "error" || i.level === "warning") && String(i.message ?? "").trim() !== "")
+                : [];
 
-            settingsHasError = !!hasError;
-            settingsErrorMessage = message;
-
-            if (settingsHasError) {
-                settingsBtn.dataset.state = "idle-error";
-                settingsBtn.title = settingsErrorMessage || "Some variables could not be mapped";
-            }
-            else {
-                settingsBtn.dataset.state = "idle";
-                settingsBtn.title = "Settings";
-            }
+            updateStatusButton();
         },
 
         setExportHandler(fn) {

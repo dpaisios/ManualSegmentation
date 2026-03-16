@@ -123,12 +123,45 @@ body {
     background-image: url("./images/settings_hover.svg");
 }
 
-.title-settings-btn[data-state="idle-error"] .title-settings-icon {
-    background-image: url("./images/settings_error.svg");
+/* STATUS BUTTON --------------------------------------------- */
+
+.title-status-btn {
+    position: relative;
+    height: 28px;
+    width: 28px;
 }
 
-.title-settings-btn[data-state="hover-error"] .title-settings-icon {
-    background-image: url("./images/settings_hover_error.svg");
+.title-status-btn[data-state="hidden"] {
+    display: none;
+}
+
+.title-status-btn[data-state="warning"] .title-status-icon {
+    background-image: url("./images/warning.svg");
+}
+
+.title-status-btn[data-state="error"] .title-status-icon {
+    background-image: url("./images/error.svg");
+}
+
+.title-status-btn {
+    position: relative;
+    height: 28px;
+    width: 28px;
+
+    cursor: default;      /* override generic button cursor */
+}
+
+.title-status-btn:hover:not(:disabled) {
+    background: transparent;   /* no button hover look */
+    color: inherit;
+}
+
+.title-status-btn:active:not(:disabled) {
+    background: transparent;   /* no pressed look */
+}
+
+.title-status-btn .title-status-icon {
+    pointer-events: none;
 }
 
 /* DROPDOWN HIT ZONE ------------------------------------------ */
@@ -146,6 +179,31 @@ body {
 
 .dropdownHitZone.active {
     opacity: 1;
+}
+
+/* TITLE ISSUES TOOLTIP -------------------------------------- */
+
+.titleIssuesTooltip {
+    position: fixed;
+    z-index: 30000;
+
+    min-width: 260px;      /* ADD */
+    max-width: 420px;      /* slightly wider */
+
+    padding: 8px 10px;
+
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+
+    color: #222;
+    font: 13px/1.35 sans-serif;
+
+    white-space: pre-line;
+    overflow-wrap: break-word;   /* ADD */
+
+    pointer-events: none;
 }
 
 /* LEFT GROUP: dropdown arrow + title ------------------------- */

@@ -121,6 +121,27 @@ const titleBarController = attachTitleBar({
 });
 
 // -------------------------------------------------------------
+function getSelectionsForPreview(state) {
+    const preview = state?.dragSelectionPreview ?? null;
+
+    if (!preview?.sourceSel || !preview?.sel) {
+        return {
+            selections: AppState.selections,
+            previewSel: null,
+            preview: null
+        };
+    }
+
+    return {
+        selections: AppState.selections.map(s =>
+            s === preview.sourceSel ? preview.sel : s
+        ),
+        previewSel: preview.sel,
+        preview
+    };
+}
+
+// -------------------------------------------------------------
 // Redraw implementations
 // -------------------------------------------------------------
 function redrawXY() {
@@ -135,11 +156,20 @@ function redrawXY() {
         xyCanvas.height
     );
 
-    const tempSelection =
-        timeBarController?.state?.tempSelection ?? null;
+    const state = timeBarController?.state ?? null;
+    const tempSelection = state?.tempSelection ?? null;
 
+    const {
+        selections: selectionsForDraw,
+        previewSel,
+        preview
+    } = getSelectionsForPreview(state);
+
+    const hoveredSelRaw = state?.deleteTarget ?? null;
     const hoveredSel =
-        timeBarController?.state?.deleteTarget ?? null;
+        previewSel && hoveredSelRaw === preview?.sourceSel
+            ? previewSel
+            : hoveredSelRaw;
 
     const vmOverlay = AppState.overlays.velocityMinima;
     const vmDisplay = AppState.display.velocityMinima;
@@ -153,14 +183,14 @@ function redrawXY() {
         xyCtx,
         X, Y, Tip, TipSeg,
         T,
-        AppState.selections,
+        selectionsForDraw,
         tempSelection,
         visible,
         transform,
         xyCanvas.width,
         xyCanvas.height,
         visibility.showPenUp(),
-        timeBarController.state.split,
+        state?.split,
         hoveredSel,
         velocityMinimaIdxsXY
     );
@@ -187,10 +217,25 @@ function redrawTimeBar(state) {
             ? vmOverlay.indices
             : [];
 
+    const {
+        selections: selectionsForDraw,
+        previewSel,
+        preview
+    } = getSelectionsForPreview(state);
+
+    const dragPreview =
+        previewSel && preview
+            ? {
+                sel: previewSel,
+                side: preview.side,
+                rawTime: preview.rawTime
+            }
+            : null;
+
     TB.drawTimeBar(
         timeCtx,
         T, Tip,
-        AppState.selections,
+        selectionsForDraw,
         state.tempSelection,
         state.hoveredHandle,
         state.deleteTarget,
@@ -198,7 +243,8 @@ function redrawTimeBar(state) {
         timeCanvas.height,
         state.split,
         state.mergePreview,
-        velocityMinimaIdxsTimeBar
+        velocityMinimaIdxsTimeBar,
+        dragPreview
     );
 
     clearOverlay("timebar-");
@@ -209,8 +255,8 @@ function redrawTimeBar(state) {
     const offsetX = rect.left + window.scrollX;
     const offsetY = rect.top  + window.scrollY;
 
-    for (let i = 0; i < AppState.selections.length; i++) {
-        const sel = AppState.selections[i];
+    for (let i = 0; i < selectionsForDraw.length; i++) {
+        const sel = selectionsForDraw[i];
         if (sel.bubbleAlpha <= 0.01) continue;
 
         const cluster = computeClusterLayout(
@@ -418,7 +464,7 @@ const xyController = attachXYController({
     }
 });
 
-attachSettingsController({
+const settingsController = attachSettingsController({
     titleBarController,
     AppState,
     settingsOptions,
@@ -440,7 +486,8 @@ const lifecycle = attachLifecycleController({
     setTitle: () => {
         titleBarController.updateTitleBar();
     },
-    renderers
+    renderers,
+    settingsController   // NEW
 });
 
 titleBarController.setLifecycle(lifecycle);

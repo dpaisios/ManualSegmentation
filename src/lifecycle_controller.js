@@ -19,7 +19,9 @@ export function attachLifecycleController({
     settingsOptions,
 
     setTitle,
-    renderers
+    renderers,
+
+    settingsController   // NEW
 }) {
 
     // =========================================================
@@ -153,6 +155,9 @@ export function attachLifecycleController({
         AppState.dataLoaded = true;
 
         setTitle(AppState.originalFileName);
+
+        settingsController?.refreshSettingsState?.();   // NEW
+
         renderers.redrawAll();
     }
 
@@ -197,6 +202,9 @@ export function attachLifecycleController({
         AppState.dataLoaded = true;
 
         setTitle(AppState.originalFileName);
+
+        settingsController?.refreshSettingsState?.();
+
         renderers.redrawAll();
     }
 
@@ -290,6 +298,9 @@ export function attachLifecycleController({
         AppState.dataLoaded = true;
 
         setTitle(AppState.originalFileName);
+
+        settingsController?.refreshSettingsState?.();
+
         renderers.redrawAll();
     }
 

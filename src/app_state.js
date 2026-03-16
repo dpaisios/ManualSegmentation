@@ -36,8 +36,32 @@ export const AppState = {
             showTimeBar: true
         }
     },
+
+    // ---------------------------------------------------------
+    // Data quality warnings
+    // ---------------------------------------------------------
+    dataQuality: {
+        hasDuplicateTimestamps: false
+    },
+
+    // aggregated title-bar issues
+    titleIssues: [],
+
+    // interaction / snapping
+    snapping: {
+        // soft snap while dragging: sample captures when raw time is within this
+        // fraction of median dt
+        captureFrac: 0.30,
+
+        // release threshold for direction-aware hysteresis while dragging
+        releaseFrac: 0.45
+    },
     
     // selections
+    // New contract:
+    // - i0 / i1: inclusive snapped sample indices (source of truth for membership)
+    // - t0 / t1: display/export-aligned handle times derived from snapped indices
+    //   and kept on the object for compatibility with existing drawing code
     selections: [],
 
     // increments whenever selections or IDs change
@@ -126,6 +150,6 @@ export const AppState = {
         hasAnyMapping: false,
 
         // true when invalid mappings exist
-        hasErrors: false
+        hasErrors: false,
     },
 };

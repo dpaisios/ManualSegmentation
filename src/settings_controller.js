@@ -116,17 +116,54 @@ export function attachSettingsController({
         pulseManualFieldErrorImpl(menuEl, key);
     }
 
-    function updateTitleBarSettingsError() {
+    function updateTitleBarIssues() {
+        if (!AppState.dataLoaded) {
+            titleBarController.setTitleIssues([]);
+            return;
+        }
+
+        const issues = [];
+
         const mm = getManualMapping();
 
-        const hasBlockingErrors =
-            !!mm.enabled &&
-            !!mm.hasErrors;
+        // -------------------------------------------------
+        // Critical variable presence (auto OR manual)
+        // -------------------------------------------------
+        const critical = ["X","Y","Z","t","P"];
+        const missing = [];
 
-        titleBarController.setSettingsError(
-            hasBlockingErrors,
-            hasBlockingErrors ? "Some variables could not be mapped" : ""
-        );
+        for (const key of critical) {
+            const idx = AppState.detectedCols?.[key];
+
+            if (!Number.isInteger(idx) || idx < 0) {
+                missing.push(key);
+            }
+        }
+
+        if (missing.length) {
+            issues.push({
+                level: "error",
+                message:
+                    "Missing critical variable mappings: " +
+                    missing.join(", ")
+            });
+        }
+
+        // -------------------------------------------------
+        // Duplicate timestamp warning
+        // -------------------------------------------------
+        if (AppState.dataQuality?.hasDuplicateTimestamps) {
+            issues.push({
+                level: "warning",
+                message:
+                    "Duplicate time stamps detected in the dataset"
+            });
+        }
+
+        // -------------------------------------------------
+        // Push to title bar
+        // -------------------------------------------------
+        titleBarController.setTitleIssues(issues);
     }
 
     function syncVelocityMinimaSetting() {
@@ -207,7 +244,7 @@ export function attachSettingsController({
         updateManualMappingUI();
         updateRegularChecks(menuEl, settingsOptions);
         updateCheckboxGroupItems(menuEl, settingsOptions);
-        updateTitleBarSettingsError();
+        updateTitleBarIssues();
     }
 
     function toggleOption(index) {
@@ -307,7 +344,7 @@ export function attachSettingsController({
         setActiveSuggestionKey: (v) => { activeSuggestionKey = v; },
 
         updateManualMappingUI,
-        updateTitleBarSettingsError,
+        updateTitleBarIssues,
         pulseManualFieldError,
 
         applyColumnSelection,
@@ -339,7 +376,7 @@ export function attachSettingsController({
 
         menuEl.remove();
         menuEl = null;
-        updateTitleBarSettingsError();
+        updateTitleBarIssues();
         titleBarController.setSettingsMenuOpen(false);
 
         if (docMouseDown) {
@@ -353,7 +390,7 @@ export function attachSettingsController({
 
         syncManualMappingPreviewFromDetected();
         validateManualMappings();
-        updateTitleBarSettingsError();
+        updateTitleBarIssues();
         syncVelocityMinimaSetting();
 
         menuEl = document.createElement("div");
@@ -442,9 +479,25 @@ export function attachSettingsController({
 
     validateManualMappings();
     syncVelocityMinimaSetting();
-    updateTitleBarSettingsError();
+    updateTitleBarIssues();
 
     return {
-        closeMenu
+        closeMenu,
+
+        refreshTitleBarIssues() {
+            updateTitleBarIssues();
+        },
+
+        refreshSettingsState() {
+            syncVelocityMinimaSetting();
+
+            if (menuEl) {
+                updateManualMappingUI();
+                updateRegularChecks(menuEl, settingsOptions);
+                updateCheckboxGroupItems(menuEl, settingsOptions);
+            }
+
+            updateTitleBarIssues();
+        }
     };
 }

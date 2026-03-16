@@ -71,6 +71,14 @@ export function attachTimeBarController({
     let dragStartX          = null;
     let tempSelection       = null;
 
+    // sample-aware drag preview state
+    let dragSelectionPreview = null;   // { sourceSel, sel, side, rawTime } | null
+    let dragRawTime         = null;   // continuous pointer-derived time
+    let dragLastRawTime     = null;   // previous raw time (for direction)
+    let dragDirection       = 0;      // -1 | 0 | +1
+    let dragSnappedIndex    = null;   // hysteretic preview snap target
+    let dragAnchorIndex     = null;   // for new selection creation
+
     let hoveredHandle = null;   // { sel, side } | null
     let deleteTarget  = null;   // sel | null
 
@@ -100,6 +108,13 @@ export function attachTimeBarController({
         draggingEndHandle   = null;
         dragStartX          = null;
         tempSelection       = null;
+
+        dragSelectionPreview = null;
+        dragRawTime         = null;
+        dragLastRawTime     = null;
+        dragDirection       = 0;
+        dragSnappedIndex    = null;
+        dragAnchorIndex     = null;
     }
 
     function clearHoverState() {
@@ -127,6 +142,149 @@ export function attachTimeBarController({
             y >= barY0 && y <= barY1;
 
         return { barClickable, leftPad, barWidth, barY0, barY1 };
+    }
+
+    function medianDt() {
+        if (!Array.isArray(T) || T.length < 2) return 0;
+
+        const diffs = [];
+        for (let i = 1; i < T.length; i++) {
+            const d = T[i] - T[i - 1];
+            if (Number.isFinite(d) && d > 0) diffs.push(d);
+        }
+        if (!diffs.length) return 0;
+
+        diffs.sort((a, b) => a - b);
+        const mid = Math.floor(diffs.length / 2);
+        return (diffs.length % 2)
+            ? diffs[mid]
+            : 0.5 * (diffs[mid - 1] + diffs[mid]);
+    }
+
+    function snapParams() {
+        const md = medianDt();
+        return {
+            capture: md * 0.30,
+            release: md * 0.45
+        };
+    }
+
+    function updateDragDirection(rawT) {
+        if (!Number.isFinite(rawT)) return;
+
+        if (Number.isFinite(dragLastRawTime)) {
+            if (rawT > dragLastRawTime) dragDirection = +1;
+            else if (rawT < dragLastRawTime) dragDirection = -1;
+        }
+
+        dragLastRawTime = rawT;
+    }
+
+    function boundaryIndexForRawTime(rawT, side = null) {
+        if (!Number.isFinite(rawT)) return null;
+
+        if (side === "left") {
+            return Select.resolveLeftBoundaryIndex(T, rawT);
+        }
+
+        if (side === "right") {
+            return Select.resolveRightBoundaryIndex(T, rawT);
+        }
+
+        return Select.nearestSampleIndex(T, rawT);
+    }
+
+    function nearestSampleWithinCapture(rawT, side = null) {
+        if (!Number.isFinite(rawT)) return null;
+
+        const i = boundaryIndexForRawTime(rawT, side);
+        if (!Number.isFinite(i)) return null;
+
+        const { capture } = snapParams();
+        if (Math.abs(T[i] - rawT) <= capture) return i;
+
+        return null;
+    }
+
+    function updateHystereticSnap(rawT, side = null) {
+        if (!Number.isFinite(rawT)) return null;
+
+        const { release } = snapParams();
+
+        if (Number.isFinite(dragSnappedIndex)) {
+            const ts = T[dragSnappedIndex];
+
+            const shouldRelease =
+                (dragDirection > 0 && rawT > ts + release) ||
+                (dragDirection < 0 && rawT < ts - release);
+
+            if (!shouldRelease) {
+                return dragSnappedIndex;
+            }
+
+            dragSnappedIndex = null;
+        }
+
+        const captured = nearestSampleWithinCapture(rawT, side);
+        if (Number.isFinite(captured)) {
+            dragSnappedIndex = captured;
+            return captured;
+        }
+
+        return null;
+    }
+
+    function forceNearestSnap(rawT, side = null) {
+        return boundaryIndexForRawTime(rawT, side);
+    }
+
+    function getSelectionIndexBounds(sel) {
+        const i0 = Number.isFinite(sel?.i0)
+            ? sel.i0
+            : Select.resolveLeftBoundaryIndex(T, sel?.t0);
+
+        const i1 = Number.isFinite(sel?.i1)
+            ? sel.i1
+            : Select.resolveRightBoundaryIndex(T, sel?.t1);
+
+        return {
+            i0: Math.min(i0, i1),
+            i1: Math.max(i0, i1)
+        };
+    }
+
+    function buildHandleDragPreview(sourceSel, side, rawTime, nextBoundaryIndex) {
+        if (!sourceSel) return null;
+        if (!Number.isFinite(nextBoundaryIndex)) return null;
+
+        const base = getSelectionIndexBounds(sourceSel);
+
+        let i0 = base.i0;
+        let i1 = base.i1;
+
+        if (side === "left") {
+            i0 = nextBoundaryIndex;
+        } else if (side === "right") {
+            i1 = nextBoundaryIndex;
+        } else {
+            return null;
+        }
+
+        const a = Math.min(i0, i1);
+        const b = Math.max(i0, i1);
+
+        return {
+            sourceSel,
+            side,
+            rawTime,
+            sel: {
+                ...sourceSel,
+                i0: a,
+                i1: b,
+                t0: T[a],
+                t1: T[b]
+            }
+        };
     }
 
     // ESC exits split mode (recommended UX)
@@ -365,13 +523,41 @@ export function attachTimeBarController({
 
             if (TB.hitTestHandleRect(x, y, x0, "left", barY0, barY1, canvas.height)) {
                 draggingStartHandle = sel;
+                dragRawTime         = sel.t0;
+                dragLastRawTime     = sel.t0;
+                dragDirection       = 0;
+                dragSnappedIndex    = Number.isFinite(sel.i0)
+                    ? sel.i0
+                    : Select.resolveLeftBoundaryIndex(T, sel.t0);
+
+                dragSelectionPreview = buildHandleDragPreview(
+                    sel,
+                    "left",
+                    sel.t0,
+                    dragSnappedIndex
+                );
+
                 canvas.style.cursor = "grabbing";
                 deleteTarget = null;
                 return;
             }
 
             if (TB.hitTestHandleRect(x, y, x1, "right", barY0, barY1, canvas.height)) {
-                draggingEndHandle = sel;
+                draggingEndHandle   = sel;
+                dragRawTime         = sel.t1;
+                dragLastRawTime     = sel.t1;
+                dragDirection       = 0;
+                dragSnappedIndex    = Number.isFinite(sel.i1)
+                    ? sel.i1
+                    : Select.resolveRightBoundaryIndex(T, sel.t1);
+
+                dragSelectionPreview = buildHandleDragPreview(
+                    sel,
+                    "right",
+                    sel.t1,
+                    dragSnappedIndex
+                );
+
                 canvas.style.cursor = "grabbing";
                 deleteTarget = null;
                 return;
@@ -425,6 +611,13 @@ export function attachTimeBarController({
         ) {
             dragging   = true;
             dragStartX = clamp(x, leftPad, leftPad + barWidth);
+
+            const tStart = pixelToTime(dragStartX, leftPad, barWidth, tMin, tMax);
+            dragRawTime      = tStart;
+            dragLastRawTime  = tStart;
+            dragDirection    = 0;
+            dragAnchorIndex  = Select.resolveLeftBoundaryIndex(T, tStart);
+            dragSnappedIndex = dragAnchorIndex;
 
             tempSelection = null;
             deleteTarget  = null;
@@ -753,11 +946,37 @@ export function attachTimeBarController({
             hoveredHandle = null;
             deleteTarget  = null;
 
-            const proposedT0 =
-                pixelToTime(x, leftPad, barWidth, tMin, tMax);
+            const rawT = pixelToTime(x, leftPad, barWidth, tMin, tMax);
+            dragRawTime = rawT;
+            updateDragDirection(rawT);
 
-            draggingStartHandle.t0 =
-                Select.clampLeftHandle(selections, draggingStartHandle, proposedT0);
+            const snappedI = updateHystereticSnap(rawT, "left");
+            const previewI = Number.isFinite(snappedI)
+                ? snappedI
+                : boundaryIndexForRawTime(rawT, "left");
+
+            if (Number.isFinite(previewI)) {
+                const clampedI = Select.clampLeftHandleIndex(
+                    selections,
+                    draggingStartHandle,
+                    previewI,
+                    T
+                );
+
+                const displayT =
+                    (Number.isFinite(snappedI) || clampedI !== previewI)
+                        ? T[clampedI]
+                        : rawT;
+
+                dragSnappedIndex = Number.isFinite(snappedI) ? clampedI : null;
+
+                dragSelectionPreview = buildHandleDragPreview(
+                    draggingStartHandle,
+                    "left",
+                    displayT,
+                    clampedI
+                );
+            }
 
             redrawTimeBar();
             redrawXY();
@@ -771,11 +990,37 @@ export function attachTimeBarController({
             hoveredHandle = null;
             deleteTarget  = null;
 
-            const proposedT1 =
-                pixelToTime(x, leftPad, barWidth, tMin, tMax);
+            const rawT = pixelToTime(x, leftPad, barWidth, tMin, tMax);
+            dragRawTime = rawT;
+            updateDragDirection(rawT);
 
-            draggingEndHandle.t1 =
-                Select.clampRightHandle(selections, draggingEndHandle, proposedT1);
+            const snappedI = updateHystereticSnap(rawT, "right");
+            const previewI = Number.isFinite(snappedI)
+                ? snappedI
+                : boundaryIndexForRawTime(rawT, "right");
+
+            if (Number.isFinite(previewI)) {
+                const clampedI = Select.clampRightHandleIndex(
+                    selections,
+                    draggingEndHandle,
+                    previewI,
+                    T
+                );
+
+                const displayT =
+                    (Number.isFinite(snappedI) || clampedI !== previewI)
+                        ? T[clampedI]
+                        : rawT;
+
+                dragSnappedIndex = Number.isFinite(snappedI) ? clampedI : null;
+
+                dragSelectionPreview = buildHandleDragPreview(
+                    draggingEndHandle,
+                    "right",
+                    displayT,
+                    clampedI
+                );
+            }
 
             redrawTimeBar();
             redrawXY();
@@ -789,19 +1034,39 @@ export function attachTimeBarController({
             hoveredHandle = null;
             deleteTarget  = null;
 
-            const tStart =
-                pixelToTime(dragStartX, leftPad, barWidth, tMin, tMax);
+            const rawT = pixelToTime(x, leftPad, barWidth, tMin, tMax);
+            dragRawTime = rawT;
+            updateDragDirection(rawT);
 
-            let tCurr =
-                pixelToTime(x, leftPad, barWidth, tMin, tMax);
+            const nearestI = Select.nearestSampleIndex(T, rawT);
+            const movingSide =
+                Number.isFinite(nearestI) && nearestI < dragAnchorIndex
+                    ? "left"
+                    : "right";
 
-            tCurr =
-                Select.clampNewSelectionTime(selections, tStart, tCurr);
+            let currI = updateHystereticSnap(rawT, movingSide);
+            if (!Number.isFinite(currI)) {
+                currI = forceNearestSnap(rawT, movingSide);
+            }
+
+            currI = Select.clampNewSelectionIndex(
+                selections,
+                dragAnchorIndex,
+                currI,
+                T
+            );
+
+            const i0 = Math.min(dragAnchorIndex, currI);
+            const i1 = Math.max(dragAnchorIndex, currI);
 
             tempSelection = {
-                t0: Math.min(tStart, tCurr),
-                t1: Math.max(tStart, tCurr)
+                i0,
+                i1,
+                t0: T[i0],
+                t1: T[i1]
             };
+
+            dragSnappedIndex = currI;
 
             redrawTimeBar();
             redrawXY();
@@ -826,7 +1091,8 @@ export function attachTimeBarController({
                 selections,
                 mergeT0,
                 mergeT1,
-                mergeSource
+                mergeSource,
+                T
             );
 
             if (next !== selections) {
@@ -852,14 +1118,50 @@ export function attachTimeBarController({
             return;
         }
 
+        if (draggingStartHandle) {
+            const preview =
+                dragSelectionPreview &&
+                dragSelectionPreview.sourceSel === draggingStartHandle &&
+                dragSelectionPreview.side === "left"
+                    ? dragSelectionPreview
+                    : null;
+
+            if (preview?.sel) {
+                draggingStartHandle.i0 = preview.sel.i0;
+                draggingStartHandle.i1 = preview.sel.i1;
+                Select.syncSelectionToIndices(draggingStartHandle, T);
+            }
+        }
+
+        if (draggingEndHandle) {
+            const preview =
+                dragSelectionPreview &&
+                dragSelectionPreview.sourceSel === draggingEndHandle &&
+                dragSelectionPreview.side === "right"
+                    ? dragSelectionPreview
+                    : null;
+
+            if (preview?.sel) {
+                draggingEndHandle.i0 = preview.sel.i0;
+                draggingEndHandle.i1 = preview.sel.i1;
+                Select.syncSelectionToIndices(draggingEndHandle, T);
+            }
+        }
+
         // -------------------------------------------------
         // 3) New selection creation commit
         // -------------------------------------------------
-        if (dragging && tempSelection && tempSelection.t1 > tempSelection.t0) {
-            const next = Select.addOrMergeSelectionRange(
+        if (
+            dragging &&
+            tempSelection &&
+            Number.isFinite(tempSelection.i0) &&
+            Number.isFinite(tempSelection.i1)
+        ) {
+            const next = Select.addOrMergeSelectionIndexRange(
                 selections,
-                tempSelection.t0,
-                tempSelection.t1
+                tempSelection.i0,
+                tempSelection.i1,
+                T
             );
             setSelections(next);
         }
@@ -914,6 +1216,10 @@ export function attachTimeBarController({
             get hoveredHandle() { return hoveredHandle; },
             get deleteTarget()  { return deleteTarget; },
             get tempSelection() { return tempSelection; },
+            get dragRawTime() { return dragRawTime; },
+            get dragSnappedIndex() { return dragSnappedIndex; },
+            get dragAnchorIndex() { return dragAnchorIndex; },
+            get dragSelectionPreview() { return dragSelectionPreview; },
             get hoveredCommentTarget() { return hoveredCommentTarget; },
 
             get mergePreview() {

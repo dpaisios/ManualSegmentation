@@ -133,23 +133,22 @@ function drawVelocityMinimaXY(
 // -------------------------------------------------------------
 // Highlight specific (t0, t1) on XY plot
 // -------------------------------------------------------------
-export function drawXYHighlight(
+export function drawXYHighlightIndices(
     ctx, X, Y, Tip, TipSeg,
-    T, t0, t1, alpha,
+    i0, i1, alpha,
     transform, canvasWidth, canvasHeight,
     showUp,
     colorOverride = null
 ) {
-    let start = 0;
-    while (start < T.length && T[start] < t0) start++;
-    let end = start;
-    while (end < T.length && T[end] < t1) end++;
+    if (!Number.isFinite(i0) || !Number.isFinite(i1)) return;
 
-    if (start >= T.length || end >= T.length) return;
+    let start = Math.max(0, Math.min(i0, i1));
+    let end   = Math.min(Tip.length - 1, Math.max(i0, i1));
+
+    if (start > end) return;
 
     let i = start;
     while (i <= end) {
-
         if (!showUp && Tip[i] === 0) {
             i++;
             continue;
@@ -188,6 +187,30 @@ export function drawXYHighlight(
 
         ctx.stroke();
     }
+}
+
+export function drawXYHighlight(
+    ctx, X, Y, Tip, TipSeg,
+    T, t0, t1, alpha,
+    transform, canvasWidth, canvasHeight,
+    showUp,
+    colorOverride = null
+) {
+    let start = 0;
+    while (start < T.length && T[start] < t0) start++;
+    let end = start;
+    while (end < T.length && T[end] < t1) end++;
+
+    if (start >= T.length) return;
+    if (end >= T.length) end = T.length - 1;
+
+    drawXYHighlightIndices(
+        ctx, X, Y, Tip, TipSeg,
+        start, end, alpha,
+        transform, canvasWidth, canvasHeight,
+        showUp,
+        colorOverride
+    );
 }
 
 // -------------------------------------------------------------
@@ -272,6 +295,28 @@ function drawPerpSplitMarker(
 // -------------------------------------------------------------
 // Full XY redraw with selections
 // -------------------------------------------------------------
+function getSelectionIndexSpan(sel, T) {
+    if (sel && Number.isFinite(sel.i0) && Number.isFinite(sel.i1)) {
+        return {
+            i0: Math.min(sel.i0, sel.i1),
+            i1: Math.max(sel.i0, sel.i1)
+        };
+    }
+
+    let start = 0;
+    while (start < T.length && T[start] < sel.t0) start++;
+    let end = start;
+    while (end < T.length && T[end] < sel.t1) end++;
+
+    if (start >= T.length) return null;
+    if (end >= T.length) end = T.length - 1;
+
+    return {
+        i0: Math.min(start, end),
+        i1: Math.max(start, end)
+    };
+}
+
 export function drawXYFromSelections(
     ctx, X, Y, Tip, TipSeg,
     T,
@@ -297,13 +342,14 @@ export function drawXYFromSelections(
         !!tempSel?.__mergePreview &&
         Array.isArray(tempSel.gaps);
 
+    const hoveredSpan = hoveredSel ? getSelectionIndexSpan(hoveredSel, T) : null;
+
     const hoverDimmingActive =
         !!hoveredSel &&
+        !!hoveredSpan &&
         !tempSel &&
         !splitting &&
-        Number.isFinite(hoveredSel.t0) &&
-        Number.isFinite(hoveredSel.t1) &&
-        hoveredSel.t1 > hoveredSel.t0;
+        hoveredSpan.i1 >= hoveredSpan.i0;
 
     // ---------------------------------------------------------
     // 1) Draw BASE XY trace 
@@ -347,9 +393,12 @@ export function drawXYFromSelections(
             alpha = 0.75;
         }
 
-        drawXYHighlight(
+        const span = getSelectionIndexSpan(sel, T);
+        if (!span) continue;
+
+        drawXYHighlightIndices(
             ctx, X, Y, Tip, TipSeg,
-            T, sel.t0, sel.t1, alpha,
+            span.i0, span.i1, alpha,
             transform, canvasWidth, canvasHeight,
             showUp
         );
@@ -359,12 +408,15 @@ export function drawXYFromSelections(
     // 3) Temp selection highlight (creation only)
     // ---------------------------------------------------------
     if (tempSel && !mergePreviewActive) {
-        drawXYHighlight(
-            ctx, X, Y, Tip, TipSeg,
-            T, tempSel.t0, tempSel.t1, 0.9,
-            transform, canvasWidth, canvasHeight,
-            showUp
-        );
+        const span = getSelectionIndexSpan(tempSel, T);
+        if (span) {
+            drawXYHighlightIndices(
+                ctx, X, Y, Tip, TipSeg,
+                span.i0, span.i1, 0.9,
+                transform, canvasWidth, canvasHeight,
+                showUp
+            );
+        }
     }
 
     // ---------------------------------------------------------

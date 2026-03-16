@@ -152,6 +152,52 @@ function drawVelocityMinimaTicks(ctx, minimaIdxs, T, timeToX, barY0, barY1) {
 // -------------------------------------------------------------
 // Split line preview (time bar)
 // -------------------------------------------------------------
+function clampIndex(i, n) {
+    if (!Number.isFinite(i)) return 0;
+    if (n <= 0) return 0;
+    return Math.max(0, Math.min(n - 1, i | 0));
+}
+
+function sampleBoundaryTime(T, boundaryIndex) {
+    if (!Array.isArray(T) || T.length === 0) return 0;
+    if (T.length === 1) return T[0];
+
+    if (boundaryIndex <= 0) {
+        return T[0];
+    }
+    if (boundaryIndex >= T.length) {
+        return T[T.length - 1];
+    }
+
+    return 0.5 * (T[boundaryIndex - 1] + T[boundaryIndex]);
+}
+
+function selectionSpanTimes(sel, T) {
+    if (sel && Number.isFinite(sel.i0) && Number.isFinite(sel.i1)) {
+        const i0 = clampIndex(Math.min(sel.i0, sel.i1), T.length);
+        const i1 = clampIndex(Math.max(sel.i0, sel.i1), T.length);
+
+        return {
+            i0,
+            i1,
+            tStart: T[i0],
+            tEnd: T[i1]
+        };
+    }
+
+    const t0 = Math.min(sel.t0, sel.t1);
+    const t1 = Math.max(sel.t0, sel.t1);
+
+    const [i0, i1] = getIndexRange(T, t0, t1);
+
+    return {
+        i0,
+        i1,
+        tStart: t0,
+        tEnd: t1
+    };
+}
+
 function drawSplitPreviewLine(ctx, x, barY0, barY1) {
     ctx.save();
 
@@ -191,7 +237,8 @@ export function drawTimeBar(
     W, H,
     splitState,
     mergePreview = null,
-    velocityMinimaIdxs = []
+    velocityMinimaIdxs = [],
+    dragPreview = null
 ) {
     if (!T || T.length === 0) {
         ctx.clearRect(0, 0, W, H);
@@ -292,15 +339,16 @@ export function drawTimeBar(
     const triY = barY0 - triOffset;
 
     function drawOneSelection(sel) {
-        const x0 = timeToX(sel.t0);
-        const x1 = timeToX(sel.t1);
+        const span = selectionSpanTimes(sel, T);
 
-        // Subsegments coloured by Tip
-        const [startIdx, endIdx] = getIndexRange(T, sel.t0, sel.t1);
-        let lastTip  = Tip[startIdx];
-        let segStart = startIdx;
+        let x0 = timeToX(span.tStart);
+        let x1 = timeToX(span.tEnd);
 
-        for (let i = startIdx + 1; i <= endIdx; i++) {
+        // Subsegments coloured by Tip using exact inclusive sample ownership
+        let lastTip  = Tip[span.i0];
+        let segStart = span.i0;
+
+        for (let i = span.i0 + 1; i <= span.i1; i++) {
             if (Tip[i] !== lastTip) {
                 drawTimeSubSegment(
                     ctx, T,
@@ -315,12 +363,11 @@ export function drawTimeBar(
 
         drawTimeSubSegment(
             ctx, T,
-            segStart, endIdx, lastTip,
+            segStart, span.i1, lastTip,
             leftPad, barWidth, barY0, barY1,
             tMin, tMax
         );
 
-        // Handles with hover colour
         const baseColor  = "rgba(24,18,18,1)";
         const hoverColor = "rgba(119,115,107,1)";
 

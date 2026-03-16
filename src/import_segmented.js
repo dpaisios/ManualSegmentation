@@ -28,6 +28,43 @@ function snapToT(T, t) {
         : T[hi];
 }
 
+function nearestIndexInT(T, t) {
+    if (!Array.isArray(T) || T.length === 0 || !Number.isFinite(t)) return null;
+
+    if (t <= T[0]) return 0;
+    if (t >= T[T.length - 1]) return T.length - 1;
+
+    let lo = 0, hi = T.length - 1;
+    while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (T[mid] < t) lo = mid;
+        else hi = mid;
+    }
+
+    return Math.abs(T[lo] - t) <= Math.abs(T[hi] - t) ? lo : hi;
+}
+
+function makeImportedSelection({ id, i0, i1, T, flagged, comment }) {
+    if (!Array.isArray(T) || !T.length) return null;
+    if (!Number.isFinite(i0) || !Number.isFinite(i1)) return null;
+
+    const a = Math.max(0, Math.min(i0, i1));
+    const b = Math.min(T.length - 1, Math.max(i0, i1));
+    if (b < a) return null;
+
+    return {
+        i0: a,
+        i1: b,
+        t0: T[a],
+        t1: T[b],
+        id,
+        lockedID: true,
+        bubbleAlpha: 0,
+        flagged: !!flagged,
+        comment: String(comment ?? "")
+    };
+}
+
 function resolveTimeKey(rows) {
     // Preferred: whatever load_data persisted
     const k = AppState.timeColName;
@@ -154,43 +191,40 @@ export async function importSelectionsFromSegmentedExport({
         const out = [];
 
         for (const [id, meta] of metaBySegID.entries()) {
-            let t0 = Infinity;
-            let t1 = -Infinity;
+            let i0 = Infinity;
+            let i1 = -Infinity;
             let nFound = 0;
 
             for (const rid of meta.rowIDs) {
                 const idx = idxByRowID.get(rid);
                 if (idx == null) continue;
+                if (!Number.isFinite(AppState.T[idx])) continue;
 
-                const t = AppState.T[idx];
-                if (!Number.isFinite(t)) continue;
-
-                if (t < t0) t0 = t;
-                if (t > t1) t1 = t;
+                if (idx < i0) i0 = idx;
+                if (idx > i1) i1 = idx;
                 nFound++;
             }
 
-            // need at least 2 points to form a segment
-            if (nFound < 2 || !(t1 > t0)) continue;
+            // keep inclusive shared-sample semantics on import
+            if (nFound < 1 || !(i1 >= i0)) continue;
 
-            const s0 = snapToT(baseT, t0);
-            const s1 = snapToT(baseT, t1);
-            if (!(s1 > s0)) continue;
-
-            out.push({
-                t0: s0,
-                t1: s1,
+            const sel = makeImportedSelection({
                 id,
-                lockedID: true,
-                bubbleAlpha: 0,
-
-                // NEW: restore metadata
-                flagged: !!meta.flagged,
-                comment: String(meta.comment ?? "")
+                i0,
+                i1,
+                T: baseT,
+                flagged: meta.flagged,
+                comment: meta.comment
             });
+
+            if (sel) out.push(sel);
         }
 
-        out.sort((a, b) => a.t0 - b.t0);
+        out.sort((a, b) => {
+            const da = Number.isFinite(a.i0) ? a.i0 : 0;
+            const db = Number.isFinite(b.i0) ? b.i0 : 0;
+            return da - db;
+        });
         return out;
     }
 
@@ -246,25 +280,27 @@ export async function importSelectionsFromSegmentedExport({
     const out = [];
 
     for (const [id, m] of meta.entries()) {
-        if (!(m.t1 > m.t0)) continue;
+        const i0 = nearestIndexInT(baseT, m.t0);
+        const i1 = nearestIndexInT(baseT, m.t1);
+        if (!Number.isFinite(i0) || !Number.isFinite(i1)) continue;
+        if (i1 < i0) continue;
 
-        const s0 = snapToT(baseT, m.t0);
-        const s1 = snapToT(baseT, m.t1);
-        if (!(s1 > s0)) continue;
-
-        out.push({
-            t0: s0,
-            t1: s1,
+        const sel = makeImportedSelection({
             id,
-            lockedID: true,
-            bubbleAlpha: 0,
-
-            // NEW: restore metadata
-            flagged: !!m.flagged,
-            comment: String(m.comment ?? "")
+            i0,
+            i1,
+            T: baseT,
+            flagged: m.flagged,
+            comment: m.comment
         });
+
+        if (sel) out.push(sel);
     }
 
-    out.sort((a, b) => a.t0 - b.t0);
+    out.sort((a, b) => {
+        const da = Number.isFinite(a.i0) ? a.i0 : 0;
+        const db = Number.isFinite(b.i0) ? b.i0 : 0;
+        return da - db;
+    });
     return out;
 }
