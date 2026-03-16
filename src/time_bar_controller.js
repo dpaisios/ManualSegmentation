@@ -54,8 +54,7 @@ export function attachTimeBarController({
     commentEditor,
 
     // redraw hooks
-    redrawTimeBar,
-    redrawXY,
+    renderers,
 
     // optional (safe defaults)
     getDataLoaded = () => true,
@@ -294,8 +293,7 @@ export function attachTimeBarController({
             clearDragState();
             clearHoverState();
             canvas.style.cursor = "default";
-            redrawTimeBar();
-            redrawXY();
+            renderers.requestFull();
         }
     });
 
@@ -380,8 +378,7 @@ export function attachTimeBarController({
                 clearDragState();
 
                 canvas.style.cursor = "default";
-                redrawTimeBar();
-                redrawXY();
+                renderers.requestFull();
                 return;
             }
 
@@ -390,8 +387,7 @@ export function attachTimeBarController({
             clearDragState();
 
             canvas.style.cursor = "default";
-            redrawTimeBar();
-            redrawXY();
+            renderers.requestFull();
             return;
         }
 
@@ -408,7 +404,7 @@ export function attachTimeBarController({
                 y >= r.y && y <= r.y + r.h
             ) {
                 deleteTarget = sel;
-                redrawTimeBar();
+                renderers.requestTimeBar();
 
                 labelEditor.start(
                     sel,
@@ -436,8 +432,7 @@ export function attachTimeBarController({
 
                 deleteTarget = sel;
                 canvas.style.cursor = "crosshair";
-                redrawTimeBar();
-                redrawXY();
+                renderers.requestFull();
                 return;
             }
         }
@@ -452,8 +447,7 @@ export function attachTimeBarController({
 
                 // if already editing this selection comment, commit by toggling
                 if (commentEditor?.toggleCommitIfEditingSame?.(sel)) {
-                    redrawTimeBar();
-                    redrawXY();
+                    renderers.requestFull();
                     return;
                 }
 
@@ -461,7 +455,7 @@ export function attachTimeBarController({
                 const r = getClusterCommentRect(ctx, sel, T, canvas.width, canvas.height);
 
                 deleteTarget = sel;
-                redrawTimeBar();
+                renderers.requestTimeBar();
 
                 commentEditor.start(
                     sel,
@@ -488,8 +482,7 @@ export function attachTimeBarController({
             clearDragState();
             // DO NOT clearHoverState() here: prevents bubble blink
 
-            redrawTimeBar();
-            redrawXY();
+            renderers.requestFull();
             return;
         }
 
@@ -506,8 +499,7 @@ export function attachTimeBarController({
                 setSelections([...selections]);
 
                 deleteTarget = sel;
-                redrawTimeBar();
-                redrawXY();
+                renderers.requestFull();
                 return;
             }
         }
@@ -652,7 +644,7 @@ export function attachTimeBarController({
             hoveredHandle = null;
             deleteTarget  = editingSel;
             canvas.style.cursor = "default";
-            redrawTimeBar();
+            renderers.requestTimeBar();
             return;
         }
 
@@ -677,8 +669,7 @@ export function attachTimeBarController({
                 canvas.style.cursor = "default";
             }
 
-            redrawTimeBar();
-            redrawXY();
+            renderers.requestFull();
             return;
         }
 
@@ -693,8 +684,7 @@ export function attachTimeBarController({
 
             tempSelection = { __mergePreview: true, gaps };
 
-            redrawTimeBar();
-            redrawXY();
+            renderers.requestFull();
             return;
         }
 
@@ -767,14 +757,13 @@ export function attachTimeBarController({
                     hoveredHandle = bestHandle;
                     deleteTarget  = bestHandle.sel;
                     canvas.style.cursor = "grab";
-                    redrawTimeBar();
+                    renderers.requestTimeBar();
                     return;
                 }
 
                 deleteTarget = under;
                 canvas.style.cursor = "default";
-                redrawTimeBar();
-                redrawXY();
+                renderers.requestFull();
                 return;
             }
 
@@ -809,8 +798,7 @@ export function attachTimeBarController({
                     }
 
                     canvas.style.cursor = "default";
-                    redrawTimeBar();
-                    redrawXY();
+                    renderers.requestFull();
                     return;
                 }
             }
@@ -928,14 +916,13 @@ export function attachTimeBarController({
                 hoveredHandle = bestHandle;
                 deleteTarget  = bestHandle.sel;
                 canvas.style.cursor = "grab";
-                redrawTimeBar();
+                renderers.requestTimeBar();
                 return;
             }
 
             deleteTarget = bestSel;
             canvas.style.cursor = "default";
-            redrawTimeBar();
-            redrawXY();
+            renderers.requestFull();
             return;
         }
 
@@ -978,8 +965,7 @@ export function attachTimeBarController({
                 );
             }
 
-            redrawTimeBar();
-            redrawXY();
+            renderers.requestFull();
             return;
         }
 
@@ -1022,8 +1008,7 @@ export function attachTimeBarController({
                 );
             }
 
-            redrawTimeBar();
-            redrawXY();
+            renderers.requestFull();
             return;
         }
 
@@ -1068,8 +1053,7 @@ export function attachTimeBarController({
 
             dragSnappedIndex = currI;
 
-            redrawTimeBar();
-            redrawXY();
+            renderers.requestFull();
             return;
         }
     });
@@ -1106,8 +1090,7 @@ export function attachTimeBarController({
             tempSelection = null;
 
             canvas.style.cursor = "default";
-            redrawTimeBar();
-            redrawXY();
+            renderers.requestFull();
             return;
         }
 
@@ -1172,8 +1155,7 @@ export function attachTimeBarController({
         clearDragState();
 
         canvas.style.cursor = "default";
-        redrawTimeBar();
-        redrawXY();
+        renderers.requestFull();
     });
 
     // ---------------------------------------------------------
@@ -1189,23 +1171,20 @@ export function attachTimeBarController({
             hoveredHandle = null;
             deleteTarget  = editingSel;
             canvas.style.cursor = "default";
-            redrawTimeBar();
-            redrawXY();          // <-- ADD THIS
+            renderers.requestFull();
             return;
         }
 
         if (splitMode) {
             splitTime = null;
             canvas.style.cursor = "default";
-            redrawTimeBar();
-            redrawXY();
+            renderers.requestFull();
             return;
         }
 
         clearHoverState();
         canvas.style.cursor = "default";
-        redrawTimeBar();
-        redrawXY();              // <-- ADD THIS
+        renderers.requestFull();
     });
 
     // ---------------------------------------------------------

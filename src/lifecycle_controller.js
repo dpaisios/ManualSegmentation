@@ -109,9 +109,6 @@ export function attachLifecycleController({
         // Unsaved selection guard
         const curPath = AppState.originalFilePath;
         const hasSelections = AppState.selections?.length > 0;
-        const curTracked = curPath
-            ? AppState.exportTracker?.[curPath] ?? null
-            : null;
 
         const unexported =
             hasSelections &&

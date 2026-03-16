@@ -4,10 +4,7 @@
 
 import {
     loadData,
-    X, Y, T, Tip, TipSeg,
-    exportPathOverrideGlobal,
-    originalRaw,
-    colNamesOverrideGlobal
+    X, Y, T, Tip, TipSeg
 } from "./src/load_data.js";
 
 import { AppState } from "./src/app_state.js";
@@ -96,21 +93,6 @@ const visibility = createVisibilityPolicy({
 function smoothApproach(a, b, s = 0.2) {
     return a + (b - a) * s;
 }
-
-function syncVelocityMinimaSetting() {
-    const opt = settingsOptions.find(o => o.label === "Show velocity minima");
-    if (!opt) return;
-
-    opt.enabled = !!AppState.overlays?.velocityMinima?.available;
-    opt.checked = !!AppState.display?.velocityMinima?.enabled;
-
-    if (Array.isArray(opt.children) && opt.children.length >= 2) {
-        opt.children[0].checked = !!AppState.display.velocityMinima.showXY;
-        opt.children[1].checked = !!AppState.display.velocityMinima.showTimeBar;
-    }
-}
-
-syncVelocityMinimaSetting();
 
 // -------------------------------------------------------------
 // Title bar
@@ -244,7 +226,8 @@ function redrawTimeBar(state) {
         state.split,
         state.mergePreview,
         velocityMinimaIdxsTimeBar,
-        dragPreview
+        dragPreview,
+        xyController?.getTempTimeRanges?.() ?? []
     );
 
     clearOverlay("timebar-");
@@ -398,9 +381,9 @@ const labelEditor = createLabelEditor({
         }
 
         ID.recomputeAutoIDs(AppState.selections);
-        renderers.redrawTimeBar();
+        renderers.requestTimeBar();
     },
-    onCancel: () => renderers.redrawTimeBar()
+    onCancel: () => renderers.requestTimeBar()
 });
 
 // -------------------------------------------------------------
@@ -417,9 +400,9 @@ const commentEditor = createCommentEditor({
             AppState.selectionsVersion++;
         }
 
-        renderers.redrawTimeBar();
+        renderers.requestTimeBar();
     },
-    onCancel: () => renderers.redrawTimeBar()
+    onCancel: () => renderers.requestTimeBar()
 });
 
 // -------------------------------------------------------------
@@ -437,8 +420,7 @@ const timeBarController = attachTimeBarController({
     Tip,
     labelEditor,
     commentEditor,
-    redrawTimeBar: () => renderers.redrawTimeBar(),
-    redrawXY: () => renderers.redrawXY()
+    renderers
 });
 
 const xyController = attachXYController({
@@ -471,9 +453,6 @@ const settingsController = attachSettingsController({
     loadData,
     resetXYSelection: () => xyController.resetSelection(),
     renderers,
-
-    // NEW: allow settings to react to dataset loads
-    getCurrentData: () => originalRaw
 });
 
 // -------------------------------------------------------------
@@ -564,7 +543,7 @@ function animate() {
         }
     }
 
-    if (need) renderers.redrawTimeBar();
+    if (need) renderers.requestTimeBar();
     requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);

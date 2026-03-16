@@ -65,11 +65,6 @@ export function extractRowsForExport(originalRaw, selections, T, rowIds, rowIdCo
     return out;
 }
 
-// Backward-compatible no-op (kept so nothing breaks)
-export function addSegID(rows) {
-    return rows;
-}
-
 export function buildExportJSON(rows) {
     return JSON.stringify(rows, null, 2);
 }

@@ -57,13 +57,11 @@ export function hitTestHandleRect(
 // -------------------------------------------------------------
 // INTERNAL: highlight XY-selected temporal ranges (green overlay)
 //
-// Note: this reads from window.xyTempTimeRanges (set by app.js).
-// Long-term cleanup: pass xy ranges explicitly into drawTimeBar.
+// XY preview ranges passed explicitly from controller
 // -------------------------------------------------------------
-function applyXYDimMask(ctx, T, W, H) {
-    if (typeof window === "undefined") return;
-    const ranges = window.xyTempTimeRanges;
-    if (!ranges || !ranges.length) return;
+function applyXYDimMask(ctx, T, W, H, xyRanges) {
+    if (!xyRanges || !xyRanges.length) return;
+    const ranges = xyRanges;
 
     const { leftPad, barWidth, barY0, barY1 } = timeBarGeom(W, H);
     const tMin = T[0];
@@ -158,20 +156,6 @@ function clampIndex(i, n) {
     return Math.max(0, Math.min(n - 1, i | 0));
 }
 
-function sampleBoundaryTime(T, boundaryIndex) {
-    if (!Array.isArray(T) || T.length === 0) return 0;
-    if (T.length === 1) return T[0];
-
-    if (boundaryIndex <= 0) {
-        return T[0];
-    }
-    if (boundaryIndex >= T.length) {
-        return T[T.length - 1];
-    }
-
-    return 0.5 * (T[boundaryIndex - 1] + T[boundaryIndex]);
-}
-
 function selectionSpanTimes(sel, T) {
     if (sel && Number.isFinite(sel.i0) && Number.isFinite(sel.i1)) {
         const i0 = clampIndex(Math.min(sel.i0, sel.i1), T.length);
@@ -238,7 +222,8 @@ export function drawTimeBar(
     splitState,
     mergePreview = null,
     velocityMinimaIdxs = [],
-    dragPreview = null
+    dragPreview = null,
+    xyPreviewRanges = []
 ) {
     if (!T || T.length === 0) {
         ctx.clearRect(0, 0, W, H);
@@ -326,7 +311,7 @@ export function drawTimeBar(
     // ---------------------------------------------------------
     // 2.5) XY-selected temporal ranges (interaction overlay)
     // ---------------------------------------------------------
-    applyXYDimMask(ctx, T, W, H);
+    applyXYDimMask(ctx, T, W, H, xyPreviewRanges);
 
     // ---------------------------------------------------------
     // 3) Selections (real + temp)

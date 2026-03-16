@@ -13,8 +13,7 @@ export function attachXYController({
     canvas,
     AppState,
     renderers,
-    computeTimeRangesFromXYBox,
-    onSelectionsChanged = null
+    computeTimeRangesFromXYBox
 }) {
     let selecting = false;
     let dragMode  = null;
@@ -115,8 +114,7 @@ export function attachXYController({
         AppState.selectionsVersion++;
 
         resetSelection();
-        renderers.redrawXY();
-        renderers.redrawTimeBar();
+        renderers.requestFull();
     }
 
     function cursorForMode(mode) {
@@ -162,7 +160,6 @@ export function attachXYController({
         hoverMode = null;
         selectBox = null;
         tempTimeRanges = [];
-        window.xyTempTimeRanges = [];
         canvas.style.cursor = "default";
     }
 
@@ -208,10 +205,8 @@ export function attachXYController({
 
         selectBox = { x0: x, y0: y, x1: x, y1: y };
         tempTimeRanges = [];
-        window.xyTempTimeRanges = tempTimeRanges;
 
-        renderers.redrawXY();
-        renderers.redrawTimeBar();
+        renderers.requestFull();
     });
 
     canvas.addEventListener("mousemove", e => {
@@ -280,10 +275,8 @@ export function attachXYController({
         }
 
         tempTimeRanges = computeTimeRangesFromXYBox(selectBox);
-        window.xyTempTimeRanges = tempTimeRanges;
 
-        renderers.redrawXY();
-        renderers.redrawTimeBar();
+        renderers.requestFull();
     });
 
     canvas.addEventListener("mouseup", () => {
@@ -304,10 +297,7 @@ export function attachXYController({
             selectBox._hover = null;
         }
 
-        window.xyTempTimeRanges = tempTimeRanges;
-
-        renderers.redrawXY();
-        renderers.redrawTimeBar();
+        renderers.requestFull();
     });
 
     canvas.addEventListener("mouseleave", () => {

@@ -172,7 +172,7 @@ export function buildCheckboxGroupItem(opt, index, toggleOption, toggleChildOpti
 export function updateRegularChecks(menuEl, settingsOptions) {
     if (!menuEl) return;
 
-    const items = menuEl.querySelectorAll(".settingsMenuItem[data-setting-index]");
+    const items = menuEl.querySelectorAll(".settingsMenuItem[data-setting-index]:not(.settingsGroupToggle):not(.settingsGroupChild)");
     items.forEach(item => {
         const index = Number(item.dataset.settingIndex);
         const opt = settingsOptions[index];
@@ -393,16 +393,13 @@ export function createManualMappingMenuUI({
         chooseBtn.textContent = "choose";
         chooseBtn.disabled = !AppState.dataLoaded;
 
-        const suggestionAnchor = document.createElement("div");
-        suggestionAnchor.className = "settingsManualSuggestAnchor";
-
         const fieldArrow = document.createElement("button");
         fieldArrow.type = "button";
         fieldArrow.className = "settingsManualFieldArrow";
         fieldArrow.dataset.var = key;
         fieldArrow.textContent = "▾";
 
-        inputWrap.append(input, fieldArrow, suggestionAnchor);
+        inputWrap.append(input, fieldArrow);
         row.append(label, inputWrap, autoBtn, chooseBtn);
 
         input.addEventListener("mousedown", e => {

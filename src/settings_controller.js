@@ -61,15 +61,9 @@ export function createExportSuccessAnimator({
 
 export function attachSettingsController({
     titleBarController,
-
     AppState,
     settingsOptions,
-
     loadData,
-    originalRaw,
-    colNamesOverrideGlobal,
-    exportPathOverrideGlobal,
-
     resetXYSelection,
     renderers
 }) {
@@ -209,8 +203,7 @@ export function attachSettingsController({
         );
 
         resetXYSelection();
-        renderers.redrawXY();
-        renderers.redrawTimeBar();
+        renderers.requestFull();
     }
 
     function applySettingChange(opt) {
@@ -228,8 +221,7 @@ export function attachSettingsController({
             opt.label === "Show velocity minima"
         ) {
             resetXYSelection();
-            renderers.redrawXY();
-            renderers.redrawTimeBar();
+            renderers.requestFull();
         }
     }
 
@@ -289,8 +281,7 @@ export function attachSettingsController({
 
             updateCheckboxGroupItems(menuEl, settingsOptions);
             resetXYSelection();
-            renderers.redrawXY();
-            renderers.redrawTimeBar();
+            renderers.requestFull();
         }
     }
 
