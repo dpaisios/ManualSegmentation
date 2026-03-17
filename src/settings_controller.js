@@ -123,7 +123,18 @@ export function attachSettingsController({
         // -------------------------------------------------
         // Critical variable presence (auto OR manual)
         // -------------------------------------------------
-        const critical = ["X","Y","Z","t","P"];
+        const tipSourceOpt = settingsOptions?.find(o => o.label === "Tip source");
+
+        let tipSource = "P";
+        if (tipSourceOpt?.children) {
+            const zOpt = tipSourceOpt.children.find(c => c.label === "Z");
+            if (zOpt?.checked) tipSource = "Z";
+        }
+
+        const critical = (tipSource === "Z")
+            ? ["X", "Y", "Z", "t"]
+            : ["X", "Y", "t", "P"];
+
         const missing = [];
 
         for (const key of critical) {
@@ -284,25 +295,6 @@ export function attachSettingsController({
             const currentIndex = opt.children.findIndex(c => c.checked);
             if (currentIndex === childIndex) {
                 return;
-            }
-
-            const hasSelections =
-                Array.isArray(AppState.selections) &&
-                AppState.selections.length > 0;
-
-            if (hasSelections) {
-                const ok = window.confirm(
-                    "Changing the Tip source will discard your current selections.\n\n" +
-                    "Do you want to continue?"
-                );
-
-                if (!ok) {
-                    updateCheckboxGroupItems(menuEl, settingsOptions);
-                    return;
-                }
-
-                AppState.selections = [];
-                AppState.selectionsVersion++;
             }
 
             opt.children.forEach((c, i) => {

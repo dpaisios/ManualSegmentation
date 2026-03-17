@@ -138,6 +138,56 @@ function buildVelocityMinimaOverlay(data, colNames) {
     };
 }
 
+function getTipSource(settingsOptions) {
+    const tipSourceOpt = settingsOptions?.find(o => o.label === "Tip source");
+
+    if (tipSourceOpt?.children) {
+        const zOpt = tipSourceOpt.children.find(c => c.label === "Z");
+        if (zOpt?.checked) return "Z";
+    }
+
+    return "P";
+}
+
+function getCriticalKeysForTipSource(tipSource) {
+    return (tipSource === "Z")
+        ? ["X", "Y", "Z", "t"]
+        : ["X", "Y", "t", "P"];
+}
+
+function hasAllCriticalMappings(detectedCols, tipSource) {
+    const critical = getCriticalKeysForTipSource(tipSource);
+
+    return critical.every(key =>
+        Number.isInteger(detectedCols?.[key]) &&
+        detectedCols[key] >= 0
+    );
+}
+
+function clearDrawableState() {
+    X.length = 0;
+    Y.length = 0;
+    T.length = 0;
+    Tip.length = 0;
+    TipSeg.length = 0;
+    RowIDs.length = 0;
+
+    AppState.X = X;
+    AppState.Y = Y;
+    AppState.T = T;
+    AppState.Tip = Tip;
+    AppState.TipSeg = TipSeg;
+    AppState.rowIds = RowIDs;
+
+    AppState.dataQuality.hasDuplicateTimestamps = false;
+
+    AppState.overlays.velocityMinima = {
+        available: false,
+        source: null,
+        indices: []
+    };
+}
+
 // -------------------------------------------------------------
 // Main loader / reprocessor
 // -------------------------------------------------------------
@@ -267,6 +317,17 @@ export function loadData(
 
     data = processedData;
 
+    const tipSource = getTipSource(settingsOptions);
+    const drawableReady = hasAllCriticalMappings(detectedCols, tipSource);
+
+    AppState.detectedCols = detectedCols;
+    AppState.originalRaw = originalRaw;
+
+    if (!drawableReady) {
+        clearDrawableState();
+        return;
+    }
+
     buildCanonicalFields(data, detectedCols, colNames);
 
     const scaleOpt = settingsOptions?.find(o => o.label === "Scale multiplier");
@@ -278,15 +339,6 @@ export function loadData(
             row.X *= sx;
             row.Y *= sy;
         }
-    }
-
-    const tipSourceOpt = settingsOptions?.find(o => o.label === "Tip source");
-
-    let tipSource = "P";
-
-    if (tipSourceOpt?.children) {
-        const zOpt = tipSourceOpt.children.find(c => c.label === "Z");
-        if (zOpt?.checked) tipSource = "Z";
     }
 
     computeTipSeg(data, tipSource);
@@ -303,9 +355,9 @@ export function loadData(
 
     AppState.dataQuality.hasDuplicateTimestamps =
         hasDuplicateTimestampsInData(data);
-        
+
     const velocityMinimaOverlay = buildVelocityMinimaOverlay(data, colNames);
-    
+
     X.length = 0;
     Y.length = 0;
     T.length = 0;
@@ -319,8 +371,6 @@ export function loadData(
         T.push(r.t);
         Tip.push(r.Tip);
         TipSeg.push(r.Tip_seg);
-
-        // Row identity MUST come from ManSeg_rowID (string)
         RowIDs.push(String(r[ROWID_KEY]));
     }
 
@@ -330,9 +380,6 @@ export function loadData(
     AppState.Tip = Tip;
     AppState.TipSeg = TipSeg;
     AppState.rowIds = RowIDs;
-
-    AppState.detectedCols = detectedCols;
-    AppState.originalRaw = originalRaw;
     AppState.overlays.velocityMinima = velocityMinimaOverlay;
 }
 

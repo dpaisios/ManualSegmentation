@@ -226,7 +226,11 @@ export function drawTimeBar(
     xyPreviewRanges = []
 ) {
     if (!T || T.length === 0) {
+        const { leftPad, barWidth, barY0, barY1 } = timeBarGeom(W, H);
+
         ctx.clearRect(0, 0, W, H);
+        ctx.fillStyle = "#bbb";
+        ctx.fillRect(leftPad, barY0, barWidth, barY1 - barY0);
         return;
     }
 
