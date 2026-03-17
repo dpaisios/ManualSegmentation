@@ -128,6 +128,11 @@ export function attachLifecycleController({
         const txt = await window.electronAPI.readFile(filePath);
         const rows = parseData(txt, filePath);
 
+        settingsController?.reconcileManualMappingForDataset?.({
+            rawRows: rows,
+            colNamesOverride: null
+        });
+
         loadData(rows, null, null, settingsOptions);
 
         // Auto-import segmented export
@@ -185,6 +190,11 @@ export function attachLifecycleController({
         const txt = await window.electronAPI.readFile(newest);
         const rows = parseData(txt, newest);
 
+        settingsController?.reconcileManualMappingForDataset?.({
+            rawRows: rows,
+            colNamesOverride: params?.col_names ?? null
+        });
+
         loadData(
             rows,
             params?.col_names ?? null,
@@ -211,6 +221,8 @@ export function attachLifecycleController({
 
     async function loadFromPath(path, params = {}) {
         if (!path) return;
+
+        settingsController?.closeMenu?.();
 
         if (params.reset) {
             resetSessionState();
@@ -280,6 +292,11 @@ export function attachLifecycleController({
 
         const txt = await window.electronAPI.readFile(path);
         const rows = parseData(txt, path);
+
+        settingsController?.reconcileManualMappingForDataset?.({
+            rawRows: rows,
+            colNamesOverride: params?.col_names ?? null
+        });
 
         loadData(
             rows,

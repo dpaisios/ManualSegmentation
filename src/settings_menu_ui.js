@@ -373,6 +373,32 @@ export function createManualMappingMenuUI({
         primeAutoFieldsOnEnable
     } = manualMappingController;
 
+    function buildDuplicateDisplayIndexMap(columns) {
+        const seen = new Map();
+        const out = new Map();
+
+        columns.forEach(col => {
+            const n = (seen.get(col.name) || 0) + 1;
+            seen.set(col.name, n);
+            out.set(col.index0, n);
+        });
+
+        return out;
+    }
+
+    function getColumnDisplayLabel(col, columns) {
+        const counts = getDuplicateNameCounts(columns);
+        const dupCount = counts.get(col.name) || 0;
+
+        if (dupCount <= 1) {
+            return col.name;
+        }
+
+        const orderMap = buildDuplicateDisplayIndexMap(columns);
+        const kth = orderMap.get(col.index0) || 1;
+        return `${col.name} (${kth})`;
+    }
+
     function buildManualRow(key) {
         const mm = getManualMapping();
 
@@ -572,8 +598,6 @@ export function createManualMappingMenuUI({
 
         const raw = String(inputEl.value ?? "").trim();
         if (!raw) return;
-        if (/^[1-9]\d*$/.test(raw)) return;
-        if (/^"\d+"$/.test(raw)) return;
 
         const matches = columns.filter(c =>
             c.name.toLowerCase().includes(raw.toLowerCase())
@@ -593,7 +617,7 @@ export function createManualMappingMenuUI({
 
             const nameSpan = document.createElement("span");
             nameSpan.className = "settingsManualSuggestName";
-            nameSpan.textContent = col.name;
+            nameSpan.textContent = getColumnDisplayLabel(col, columns);
             item.appendChild(nameSpan);
 
             const assigned = usedBy.get(col.index0) ?? [];
@@ -649,7 +673,7 @@ export function createManualMappingMenuUI({
 
             const nameSpan = document.createElement("span");
             nameSpan.className = "settingsManualSuggestName";
-            nameSpan.textContent = col.name;
+            nameSpan.textContent = getColumnDisplayLabel(col, columns);
             item.appendChild(nameSpan);
 
             const assigned = usedBy.get(col.index0) ?? [];
@@ -788,11 +812,9 @@ export function createManualMappingMenuUI({
             if (selectedIndex0 == null) return;
 
             const mm = getManualMapping();
-            const duplicateCounts = getDuplicateNameCounts(columns);
             const col = columns[selectedIndex0];
-            const duplicated = duplicateCounts.get(col.name) > 1;
 
-            mm.fields[key] = duplicated ? String(col.index1) : col.name;
+            mm.fields[key] = col.name;
             mm.meta[key].source = "chooser";
             mm.meta[key].columnIndex = selectedIndex0;
 

@@ -289,7 +289,7 @@ export function loadData(
     detectedCols = cols;
 
     // Persist active manual overrides for current loaded dataset
-    AppState.activeManualOverrides = manualOverrides ?? {};
+    AppState.activeManualOverrides = manualOverrides ? { ...manualOverrides } : {};
 
     // Persist time column metadata for segmented import
     AppState.timeColIndex =

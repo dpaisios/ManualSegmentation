@@ -170,13 +170,10 @@ export function createManualMappingController({
 
     function formatAutoFieldForIndex(index0) {
         const columns = getDatasetColumns();
-        const counts = getDuplicateNameCounts(columns);
         const col = columns[index0];
         if (!col) return "";
 
-        return counts.get(col.name) > 1
-            ? String(col.index1)
-            : col.name;
+        return col.name;
     }
 
     function getNumericDatasetColumns() {
@@ -205,23 +202,6 @@ export function createManualMappingController({
             return { kind: "empty" };
         }
 
-        const quotedNumericName = raw.match(/^"(\d+)"$/);
-        if (quotedNumericName) {
-            return {
-                kind: "name",
-                name: quotedNumericName[1],
-                raw
-            };
-        }
-
-        if (/^[1-9]\d*$/.test(raw)) {
-            return {
-                kind: "index",
-                index1: Number(raw),
-                raw
-            };
-        }
-
         return {
             kind: "name",
             name: raw,
@@ -229,6 +209,140 @@ export function createManualMappingController({
         };
     }
 
+    function getColumnsForDataset(rawRows, colNamesOverride = null) {
+        if (!Array.isArray(rawRows) || !rawRows.length || typeof rawRows[0] !== "object") {
+            return [];
+        }
+
+        const ROWID_KEY = "ManSeg_rowID";
+        const rawKeys = Object.keys(rawRows[0]).filter(k => k !== ROWID_KEY);
+
+        let names = [...rawKeys];
+
+        if (
+            Array.isArray(colNamesOverride) &&
+            colNamesOverride.length === rawKeys.length
+        ) {
+            names = [...colNamesOverride];
+        }
+
+        return names.map((name, i) => ({
+            index0: i,
+            index1: i + 1,
+            name: String(name)
+        }));
+    }
+
+    function isDatasetColumnNumeric(rawRows, columns, index0) {
+        const col = columns[index0];
+        if (!Array.isArray(rawRows) || !col) return false;
+
+        for (const row of rawRows) {
+            const v = row[col.name];
+            if (v == null || String(v).trim() === "") return false;
+
+            const n = Number(v);
+            if (!Number.isFinite(n)) return false;
+        }
+
+        return true;
+    }
+
+    function isDatasetColumnBinary(rawRows, columns, index0) {
+        const col = columns[index0];
+        if (!Array.isArray(rawRows) || !col) return false;
+
+        for (const row of rawRows) {
+            const v = row[col.name];
+            if (v == null || String(v).trim() === "") return false;
+
+            const n = Number(v);
+            if (!Number.isFinite(n)) return false;
+            if (n !== 0 && n !== 1) return false;
+        }
+
+        return true;
+    }
+
+    function getDatasetValidationErrorForKey(key, rawRows, columns, resolvedIndex) {
+        if (resolvedIndex == null) return "";
+
+        if (!isDatasetColumnNumeric(rawRows, columns, resolvedIndex)) {
+            return "Selected column is not numeric";
+        }
+
+        if (key === "v_pits" && !isDatasetColumnBinary(rawRows, columns, resolvedIndex)) {
+            return "Variable needs to be binary";
+        }
+
+        return "";
+    }
+
+    function reconcileManualMappingsForDataset(rawRows, colNamesOverride = null) {
+        const mm = getManualMapping();
+        const columns = getColumnsForDataset(rawRows, colNamesOverride);
+
+        for (const key of MANUAL_KEYS) {
+            const text = String(mm.fields[key] ?? "").trim();
+            const source = mm.meta[key]?.source ?? null;
+
+            if (source === "auto") {
+                mm.fields[key] = "";
+                mm.resolved[key] = null;
+                mm.status[key] = "empty";
+                mm.errors[key] = "";
+                mm.meta[key].source = null;
+                mm.meta[key].columnIndex = null;
+                continue;
+            }
+
+            if (text === "") {
+                mm.fields[key] = "";
+                mm.resolved[key] = null;
+                mm.status[key] = "empty";
+                mm.errors[key] = "";
+                mm.meta[key].columnIndex = null;
+                if (mm.meta[key].source !== "auto") {
+                    mm.meta[key].source = null;
+                }
+                continue;
+            }
+
+            const matches = columns.filter(c => c.name === text);
+
+            if (matches.length !== 1) {
+                mm.fields[key] = "";
+                mm.resolved[key] = null;
+                mm.status[key] = "empty";
+                mm.errors[key] = "";
+                mm.meta[key].source = null;
+                mm.meta[key].columnIndex = null;
+                continue;
+            }
+
+            const idx = matches[0].index0;
+            const invalid = getDatasetValidationErrorForKey(key, rawRows, columns, idx);
+
+            if (invalid) {
+                mm.fields[key] = "";
+                mm.resolved[key] = null;
+                mm.status[key] = "empty";
+                mm.errors[key] = "";
+                mm.meta[key].source = null;
+                mm.meta[key].columnIndex = null;
+                continue;
+            }
+
+            mm.resolved[key] = idx;
+            mm.status[key] = "valid";
+            mm.errors[key] = "";
+            mm.meta[key].columnIndex = idx;
+        }
+
+        mm.hasAnyMapping = MANUAL_KEYS.some(k => String(mm.fields[k] ?? "").trim() !== "");
+        mm.hasErrors = false;
+    }
+    
     function activateAutoForField(key) {
         const mm = getManualMapping();
 
@@ -364,7 +478,7 @@ export function createManualMappingController({
             const token = parseFieldToken(trimmed);
 
             if (!hasData) {
-                if (token.kind === "index" || token.kind === "name") {
+                if (token.kind === "name") {
                     mm.status[key] = "valid";
                     mm.errors[key] = "";
                 } else {
@@ -390,14 +504,6 @@ export function createManualMappingController({
                 const chosenName = columns[resolvedIndex]?.name ?? "";
                 if (duplicateCounts.get(chosenName) > 1) {
                     warning = "Column name is duplicated in the dataset";
-                }
-            } else if (token.kind === "index") {
-                const idx0 = token.index1 - 1;
-
-                if (idx0 < 0 || idx0 >= columns.length) {
-                    invalid = "Column index out of range";
-                } else {
-                    resolvedIndex = idx0;
                 }
             } else if (token.kind === "name") {
                 const matches = columns.filter(c => c.name === token.name);
@@ -487,6 +593,7 @@ export function createManualMappingController({
         syncManualMappingPreviewFromDetected,
         primeAutoFieldsOnEnable,
         syncAutoFieldsFromDetected,
-        validateManualMappings
+        validateManualMappings,
+        reconcileManualMappingsForDataset
     };
 }

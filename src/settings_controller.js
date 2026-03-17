@@ -88,7 +88,8 @@ export function attachSettingsController({
         syncManualMappingPreviewFromDetected,
         primeAutoFieldsOnEnable,
         syncAutoFieldsFromDetected,
-        validateManualMappings
+        validateManualMappings,
+        reconcileManualMappingsForDataset
     } = manualMappingController;
 
     ensureManualMappingState();
@@ -514,9 +515,14 @@ export function attachSettingsController({
     validateManualMappings();
     syncVelocityMinimaSetting();
     updateTitleBarIssues();
-
+    
     return {
         closeMenu,
+
+        reconcileManualMappingForDataset({ rawRows, colNamesOverride = null }) {
+            ensureManualMappingState();
+            reconcileManualMappingsForDataset(rawRows, colNamesOverride);
+        },
 
         refreshTitleBarIssues() {
             updateTitleBarIssues();
