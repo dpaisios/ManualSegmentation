@@ -142,6 +142,15 @@ export function attachTimeBarController({
         return { barClickable, leftPad, barWidth, barY0, barY1 };
     }
 
+    function getPointer(e, leftPad, barWidth) {
+        const rawX = e.offsetX;
+        return {
+            rawX,
+            x: clamp(rawX, leftPad, leftPad + barWidth),
+            y: e.offsetY
+        };
+    }
+
     function medianDt() {
         if (!Array.isArray(T) || T.length < 2) return 0;
 
@@ -323,6 +332,50 @@ export function attachTimeBarController({
         return gaps;
     }
 
+    function resolveBestHandleHit(selections, rawX, y, leftPad, barWidth, barY0, barY1, tMin, tMax) {
+        let bestHandle = null;
+        let bestDist   = Infinity;
+
+        for (const sel of selections) {
+            const x0 = leftPad + (sel.t0 - tMin) / (tMax - tMin) * barWidth;
+            const x1 = leftPad + (sel.t1 - tMin) / (tMax - tMin) * barWidth;
+
+            const { side } = getHandleSizes(canvas.height);
+
+            const leftTipX  = x0 + side;
+            const rightTipX = x1 - side;
+
+            const allowLeft  = !(leftTipX > x1 && rawX > x1);
+            const allowRight = !(rightTipX < x0 && rawX < x0);
+
+            if (
+                allowLeft &&
+                TB.hitTestHandleRect(rawX, y, x0, "left", barY0, barY1, canvas.height)
+            ) {
+                const dist = Math.abs(rawX - x0);
+
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestHandle = { sel, side: "left" };
+                }
+            }
+
+            if (
+                allowRight &&
+                TB.hitTestHandleRect(rawX, y, x1, "right", barY0, barY1, canvas.height)
+            ) {
+                const dist = Math.abs(rawX - x1);
+
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestHandle = { sel, side: "right" };
+                }
+            }
+        }
+
+        return bestHandle;
+    }
+
     // ---------------------------------------------------------
     // MOUSEDOWN
     // ---------------------------------------------------------
@@ -335,10 +388,11 @@ export function attachTimeBarController({
         // Block all interactions while editing a label
         if (anyEditingSelectionIn(selections) || anyEditingCommentIn(selections)) return;
 
-        const x = e.offsetX;
-        const y = e.offsetY;
+        const rawX0 = e.offsetX;
+        const y0 = e.offsetY;
 
-        const { barClickable, leftPad, barWidth, barY0, barY1 } = barHit(x, y);
+        const { barClickable, leftPad, barWidth, barY0, barY1 } = barHit(rawX0, y0);
+        const { rawX, x, y } = getPointer(e, leftPad, barWidth);
         const { tMin, tMax } = getTimeBoundsFromT(T);
 
         ctx.font = "12px sans-serif";
@@ -351,8 +405,7 @@ export function attachTimeBarController({
             // Convert click to bar + time if applicable
             let tClick = null;
             if (barClickable) {
-                const xc = clamp(x, leftPad, leftPad + barWidth);
-                tClick = pixelToTime(xc, leftPad, barWidth, tMin, tMax);
+                tClick = pixelToTime(x, leftPad, barWidth, tMin, tMax);
             }
 
             // CASE 1 — Click INSIDE active selection → validate split
@@ -509,51 +562,60 @@ export function attachTimeBarController({
         // -------------------------------------------------
         // Handle drags?
         // -------------------------------------------------
-        for (const sel of selections) {
-            const x0 = leftPad + (sel.t0 - tMin) / (tMax - tMin) * barWidth;
-            const x1 = leftPad + (sel.t1 - tMin) / (tMax - tMin) * barWidth;
+        const bestHandle = resolveBestHandleHit(
+            selections,
+            rawX,
+            y,
+            leftPad,
+            barWidth,
+            barY0,
+            barY1,
+            tMin,
+            tMax
+        );
 
-            if (TB.hitTestHandleRect(x, y, x0, "left", barY0, barY1, canvas.height)) {
-                draggingStartHandle = sel;
-                dragRawTime         = sel.t0;
-                dragLastRawTime     = sel.t0;
-                dragDirection       = 0;
-                dragSnappedIndex    = Number.isFinite(sel.i0)
-                    ? sel.i0
-                    : Select.resolveLeftBoundaryIndex(T, sel.t0);
+        if (bestHandle) {
+            if (bestHandle.side === "left") {
+                draggingStartHandle = bestHandle.sel;
+
+                dragRawTime      = bestHandle.sel.t0;
+                dragLastRawTime  = bestHandle.sel.t0;
+                dragDirection    = 0;
+
+                dragSnappedIndex =
+                    Number.isFinite(bestHandle.sel.i0)
+                        ? bestHandle.sel.i0
+                        : Select.resolveLeftBoundaryIndex(T, bestHandle.sel.t0);
 
                 dragSelectionPreview = buildHandleDragPreview(
-                    sel,
+                    bestHandle.sel,
                     "left",
-                    sel.t0,
+                    bestHandle.sel.t0,
                     dragSnappedIndex
                 );
+            } else {
+                draggingEndHandle = bestHandle.sel;
 
-                canvas.style.cursor = "grabbing";
-                deleteTarget = null;
-                return;
-            }
+                dragRawTime      = bestHandle.sel.t1;
+                dragLastRawTime  = bestHandle.sel.t1;
+                dragDirection    = 0;
 
-            if (TB.hitTestHandleRect(x, y, x1, "right", barY0, barY1, canvas.height)) {
-                draggingEndHandle   = sel;
-                dragRawTime         = sel.t1;
-                dragLastRawTime     = sel.t1;
-                dragDirection       = 0;
-                dragSnappedIndex    = Number.isFinite(sel.i1)
-                    ? sel.i1
-                    : Select.resolveRightBoundaryIndex(T, sel.t1);
+                dragSnappedIndex =
+                    Number.isFinite(bestHandle.sel.i1)
+                        ? bestHandle.sel.i1
+                        : Select.resolveRightBoundaryIndex(T, bestHandle.sel.t1);
 
                 dragSelectionPreview = buildHandleDragPreview(
-                    sel,
+                    bestHandle.sel,
                     "right",
-                    sel.t1,
+                    bestHandle.sel.t1,
                     dragSnappedIndex
                 );
-
-                canvas.style.cursor = "grabbing";
-                deleteTarget = null;
-                return;
             }
+
+            canvas.style.cursor = "grabbing";
+            deleteTarget = null;
+            return;
         }
 
         // -------------------------------------------------
@@ -561,7 +623,7 @@ export function attachTimeBarController({
         // -------------------------------------------------
         for (const sel of selections) {
             const tClick = pixelToTime(
-                clamp(x, leftPad, leftPad + barWidth),
+                x,
                 leftPad, barWidth, tMin, tMax
             );
 
@@ -602,7 +664,7 @@ export function attachTimeBarController({
             )
         ) {
             dragging   = true;
-            dragStartX = clamp(x, leftPad, leftPad + barWidth);
+            dragStartX = x;
 
             const tStart = pixelToTime(dragStartX, leftPad, barWidth, tMin, tMax);
             dragRawTime      = tStart;
@@ -634,9 +696,7 @@ export function attachTimeBarController({
 
         const { tMin, tMax } = getTimeBoundsFromT(T);
 
-        const rawX = e.offsetX;
-        const x    = clamp(rawX, leftPad, leftPad + barWidth);
-        const y    = e.offsetY;
+        const { rawX, x, y } = getPointer(e, leftPad, barWidth);
 
         const editingSel = getEditingSelection(selections) || getEditingCommentSelection(selections);
 
@@ -699,8 +759,17 @@ export function attachTimeBarController({
             // -------------------------------------------------
             // 0) HANDLE HOVER (independent)
             // -------------------------------------------------
-            let bestHandle = null;
-            let bestDist   = Infinity;
+            const bestHandle = resolveBestHandleHit(
+                selections,
+                rawX,
+                y,
+                leftPad,
+                barWidth,
+                barY0,
+                barY1,
+                tMin,
+                tMax
+            );
 
             // -------------------------------------------------
             // 1) If pointer is ON the TIME BAR, choose segment by BAR HIT ONLY.
@@ -713,37 +782,6 @@ export function attachTimeBarController({
                 for (const sel of selections) {
                     const x0 = leftPad + (sel.t0 - tMin) / (tMax - tMin) * barWidth;
                     const x1 = leftPad + (sel.t1 - tMin) / (tMax - tMin) * barWidth;
-
-                    // handle hover (same as before)
-                    const { side } = getHandleSizes(canvas.height);
-
-                    const leftTipX  = x0 + side;
-                    const rightTipX = x1 - side;
-
-                    const allowLeft  = !(leftTipX > x1 && rawX > x1);
-                    const allowRight = !(rightTipX < x0 && rawX < x0);
-
-                    if (
-                        allowLeft &&
-                        TB.hitTestHandleRect(x, y, x0, "left", barY0, barY1, canvas.height)
-                    ) {
-                        const dist = Math.abs(rawX - x0);
-                        if (dist < bestDist) {
-                            bestDist = dist;
-                            bestHandle = { sel, side: "left" };
-                        }
-                    }
-
-                    if (
-                        allowRight &&
-                        TB.hitTestHandleRect(x, y, x1, "right", barY0, barY1, canvas.height)
-                    ) {
-                        const dist = Math.abs(rawX - x1);
-                        if (dist < bestDist) {
-                            bestDist = dist;
-                            bestHandle = { sel, side: "right" };
-                        }
-                    }
 
                     // bar hit decides ownership
                     if (rawX >= x0 && rawX <= x1) {
@@ -816,36 +854,6 @@ export function attachTimeBarController({
                 const x1 = leftPad + (sel.t1 - tMin) / (tMax - tMin) * barWidth;
 
                 // handle hover (same as before)
-                const { side } = getHandleSizes(canvas.height);
-
-                const leftTipX  = x0 + side;
-                const rightTipX = x1 - side;
-
-                const allowLeft  = !(leftTipX > x1 && rawX > x1);
-                const allowRight = !(rightTipX < x0 && rawX < x0);
-
-                if (
-                    allowLeft &&
-                    TB.hitTestHandleRect(x, y, x0, "left", barY0, barY1, canvas.height)
-                ) {
-                    const dist = Math.abs(rawX - x0);
-                    if (dist < bestDist) {
-                        bestDist = dist;
-                        bestHandle = { sel, side: "left" };
-                    }
-                }
-
-                if (
-                    allowRight &&
-                    TB.hitTestHandleRect(x, y, x1, "right", barY0, barY1, canvas.height)
-                ) {
-                    const dist = Math.abs(rawX - x1);
-                    if (dist < bestDist) {
-                        bestDist = dist;
-                        bestHandle = { sel, side: "right" };
-                    }
-                }
-
                 let score = -Infinity;
                 let dist2 = Infinity;
 
