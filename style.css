@@ -206,6 +206,51 @@ body {
     pointer-events: none;
 }
 
+/* TITLE ISSUES TOOLTIP STRUCTURE ----------------------------- */
+
+.titleIssuesTooltipSection{
+    display:block;
+}
+
+.titleIssuesTooltipHeader{
+    font-size:12px;
+    font-weight:600;
+    margin-bottom:4px;
+    letter-spacing:0.2px;
+}
+
+.titleIssuesTooltipSection.isErrors .titleIssuesTooltipHeader{
+    color:#7a1f1f;
+}
+
+.titleIssuesTooltipSection.isWarnings .titleIssuesTooltipHeader{
+    color:#8a6d1f;
+}
+
+.titleIssuesTooltipList{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+}
+
+.titleIssuesTooltipItem{
+    padding-left:10px;
+    position:relative;
+}
+
+.titleIssuesTooltipItem::before{
+    content:"•";
+    position:absolute;
+    left:0;
+    color:#666;
+}
+
+.titleIssuesTooltipDivider{
+    height:1px;
+    background:#e0e0e0;
+    margin:6px 0;
+}
+
 /* LEFT GROUP: dropdown arrow + title ------------------------- */
 
 .title-left {

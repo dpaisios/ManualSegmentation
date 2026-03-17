@@ -135,7 +135,7 @@ export function attachTitleBar({
     // =========================================================
     const statusBtn = document.createElement("button");
     statusBtn.className = "title-status-btn";
-    statusBtn.title = "";
+    statusBtn.removeAttribute("title");
 
     const statusIcon = document.createElement("span");
     statusIcon.className = "title-icon title-status-icon";
@@ -148,17 +148,66 @@ export function attachTitleBar({
         return titleIssues.some(i => i.level === "error") ? "error" : "warning";
     }
 
-    function getIssuesTooltipText() {
-        return titleIssues.map(i => {
-            const level = i.level === "error" ? "Error" : "Warning";
-            return `${level}: ${i.message}`;
-        }).join("\n");
+    function groupTitleIssues() {
+        const errors = [];
+        const warnings = [];
+
+        for (const issue of titleIssues) {
+            if (issue.level === "error") {
+                errors.push(issue.message);
+            } else if (issue.level === "warning") {
+                warnings.push(issue.message);
+            }
+        }
+
+        return { errors, warnings };
     }
 
     function closeIssuesTooltip() {
         if (!issuesTooltipEl) return;
         issuesTooltipEl.remove();
         issuesTooltipEl = null;
+    }
+
+    function buildIssuesTooltipContent(tip) {
+        const { errors, warnings } = groupTitleIssues();
+
+        const makeSection = (title, items, className) => {
+            if (!items.length) return null;
+
+            const section = document.createElement("div");
+            section.className = `titleIssuesTooltipSection ${className}`;
+
+            const header = document.createElement("div");
+            header.className = "titleIssuesTooltipHeader";
+            header.textContent = title;
+
+            const list = document.createElement("div");
+            list.className = "titleIssuesTooltipList";
+
+            for (const msg of items) {
+                const row = document.createElement("div");
+                row.className = "titleIssuesTooltipItem";
+                row.textContent = msg;
+                list.appendChild(row);
+            }
+
+            section.append(header, list);
+            return section;
+        };
+
+        const errSection = makeSection("Critical errors", errors, "isErrors");
+        const warnSection = makeSection("Warnings", warnings, "isWarnings");
+
+        if (errSection) tip.appendChild(errSection);
+
+        if (errSection && warnSection) {
+            const sep = document.createElement("div");
+            sep.className = "titleIssuesTooltipDivider";
+            tip.appendChild(sep);
+        }
+
+        if (warnSection) tip.appendChild(warnSection);
     }
 
     function openIssuesTooltip() {
@@ -169,7 +218,7 @@ export function attachTitleBar({
 
         const tip = document.createElement("div");
         tip.className = "titleIssuesTooltip";
-        tip.textContent = getIssuesTooltipText();
+        buildIssuesTooltipContent(tip);
 
         document.body.appendChild(tip);
 
@@ -193,19 +242,17 @@ export function attachTitleBar({
         const sev = getIssueSeverity();
 
         closeIssuesTooltip();
+        statusBtn.removeAttribute("title");
 
         if (sev === "error") {
             statusBtn.dataset.state = "error";
             statusBtn.style.display = "";
-            statusBtn.title = getIssuesTooltipText();
         } else if (sev === "warning") {
             statusBtn.dataset.state = "warning";
             statusBtn.style.display = "";
-            statusBtn.title = getIssuesTooltipText();
         } else {
             statusBtn.dataset.state = "hidden";
             statusBtn.style.display = "none";
-            statusBtn.title = "";
         }
     }
 
@@ -563,9 +610,18 @@ export function attachTitleBar({
         setLifecycle,
 
         setTitleIssues(issues = []) {
-            titleIssues = Array.isArray(issues)
-                ? issues.filter(i => i && (i.level === "error" || i.level === "warning") && String(i.message ?? "").trim() !== "")
+            const cleaned = Array.isArray(issues)
+                ? issues.filter(i =>
+                    i &&
+                    (i.level === "error" || i.level === "warning") &&
+                    String(i.message ?? "").trim() !== ""
+                )
                 : [];
+
+            titleIssues = cleaned.map(issue => ({
+                level: issue.level,
+                message: String(issue.message).trim()
+            }));
 
             updateStatusButton();
         },

@@ -24,6 +24,8 @@ import {
     createManualMappingMenuUI
 } from "./settings_menu_ui.js";
 
+import { collectAppIssues } from "./app_issues.js";
+
 export function createExportSuccessAnimator({
     onUpdate,
     onDone
@@ -112,63 +114,14 @@ export function attachSettingsController({
     }
 
     function updateTitleBarIssues() {
-        if (!AppState.dataLoaded) {
-            titleBarController.setTitleIssues([]);
-            return;
-        }
+        const issues = collectAppIssues({
+            AppState,
+            settingsOptions,
+            manualMapping: getManualMapping(),
+            rawRows: liveOriginalRaw
+        });
 
-        const issues = [];
-
-        const mm = getManualMapping();
-
-        // -------------------------------------------------
-        // Critical variable presence (auto OR manual)
-        // -------------------------------------------------
-        const tipSourceOpt = settingsOptions?.find(o => o.label === "Tip source");
-
-        let tipSource = "P";
-        if (tipSourceOpt?.children) {
-            const zOpt = tipSourceOpt.children.find(c => c.label === "Z");
-            if (zOpt?.checked) tipSource = "Z";
-        }
-
-        const critical = (tipSource === "Z")
-            ? ["X", "Y", "Z", "t"]
-            : ["X", "Y", "t", "P"];
-
-        const missing = [];
-
-        for (const key of critical) {
-            const idx = AppState.detectedCols?.[key];
-
-            if (!Number.isInteger(idx) || idx < 0) {
-                missing.push(key);
-            }
-        }
-
-        if (missing.length) {
-            issues.push({
-                level: "error",
-                message:
-                    "Missing critical variable mappings: " +
-                    missing.join(", ")
-            });
-        }
-
-        // -------------------------------------------------
-        // Duplicate timestamp warning
-        // -------------------------------------------------
-        if (AppState.dataQuality?.hasDuplicateTimestamps) {
-            issues.push({
-                level: "warning",
-                message:
-                    "Duplicate time stamps detected in the dataset"
-            });
-        }
-
-        // -------------------------------------------------
-        // Push to title bar
-        // -------------------------------------------------
+        AppState.titleIssues = issues;
         titleBarController.setTitleIssues(issues);
     }
 
