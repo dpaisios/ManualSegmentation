@@ -501,3 +501,70 @@ export function clampNewSelectionIndex(selections, anchorI, currI, T) {
         return Math.max(currI, limitLeft);
     }
 }
+
+export function restrictTimeRangesToStrokeRuns(ranges, T, Tip) {
+    if (!Array.isArray(ranges) || !Array.isArray(T) || !Array.isArray(Tip)) {
+        return [];
+    }
+    if (!T.length || T.length !== Tip.length) {
+        return [];
+    }
+
+    const out = [];
+
+    for (const r of ranges) {
+        if (!r) continue;
+
+        const i0 = resolveLeftBoundaryIndex(T, r.t0);
+        const i1 = resolveRightBoundaryIndex(T, r.t1);
+
+        if (!Number.isFinite(i0) || !Number.isFinite(i1)) continue;
+
+        const a0 = Math.min(i0, i1);
+        const a1 = Math.max(i0, i1);
+
+        let runStart = null;
+
+        for (let i = a0; i <= a1; i++) {
+            if (Tip[i] === 1) {
+                if (runStart == null) runStart = i;
+            } else if (runStart != null) {
+                out.push({
+                    i0: runStart,
+                    i1: i - 1,
+                    t0: T[runStart],
+                    t1: T[i - 1]
+                });
+                runStart = null;
+            }
+        }
+
+        if (runStart != null) {
+            out.push({
+                i0: runStart,
+                i1: a1,
+                t0: T[runStart],
+                t1: T[a1]
+            });
+        }
+    }
+
+    if (!out.length) return out;
+
+    out.sort((a, b) => (a.i0 - b.i0) || (a.i1 - b.i1));
+
+    const merged = [out[0]];
+    for (let i = 1; i < out.length; i++) {
+        const prev = merged[merged.length - 1];
+        const cur = out[i];
+
+        if (cur.i0 <= prev.i1) {
+            prev.i1 = Math.max(prev.i1, cur.i1);
+            prev.t1 = T[prev.i1];
+        } else {
+            merged.push({ ...cur });
+        }
+    }
+
+    return merged;
+}

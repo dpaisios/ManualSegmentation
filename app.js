@@ -55,6 +55,10 @@ let settingsOptions = [
     { label: "Remove last stroke", checked: false },
     { label: "Show lifts", checked: true },
     {
+        label: "Restrict selections to strokes",
+        checked: AppState.display.segmentation.restrictToStrokes
+    },
+    {
         label: "Show velocity minima",
         checked: AppState.display.velocityMinima.enabled,
         expanded: false,
@@ -443,7 +447,9 @@ const timeBarController = attachTimeBarController({
     Tip,
     labelEditor,
     commentEditor,
-    renderers
+    renderers,
+    getRestrictSelectionsToStrokes: () =>
+        AppState.display.segmentation.restrictToStrokes
 });
 
 const xyController = attachXYController({

@@ -34,7 +34,10 @@ export const AppState = {
             enabled: false,
             showXY: true,
             showTimeBar: true
-        }
+        },
+    segmentation: {
+        restrictToStrokes: false
+    }
     },
 
     // ---------------------------------------------------------

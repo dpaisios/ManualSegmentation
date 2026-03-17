@@ -184,7 +184,8 @@ export function attachSettingsController({
 
         if (
             opt.label === "Show lifts" ||
-            opt.label === "Show velocity minima"
+            opt.label === "Show velocity minima" ||
+            opt.label === "Restrict selections to strokes"
         ) {
             resetXYSelection();
             renderers.requestFull();
@@ -222,6 +223,15 @@ export function attachSettingsController({
         if (opt.label === "Show velocity minima") {
             AppState.display.velocityMinima.enabled = !!opt.checked;
             if (opt.checked) opt.expanded = true;
+
+            updateRegularChecks(menuEl, settingsOptions);
+            updateCheckboxGroupItems(menuEl, settingsOptions);
+            applySettingChange(opt);
+            return;
+        }
+
+        if (opt.label === "Restrict selections to strokes") {
+            AppState.display.segmentation.restrictToStrokes = !!opt.checked;
 
             updateRegularChecks(menuEl, settingsOptions);
             updateCheckboxGroupItems(menuEl, settingsOptions);
@@ -395,6 +405,13 @@ export function attachSettingsController({
                 menuEl.appendChild(
                     buildCheckboxGroupItem(opt, index, toggleOption, toggleChildOption)
                 );
+            }
+        });
+
+        menuEl.appendChild(buildCategory("Segmentation"));
+        settingsOptions.forEach((opt, index) => {
+            if (opt.label === "Restrict selections to strokes") {
+                menuEl.appendChild(buildRegularItem(opt, index, toggleOption));
             }
         });
 

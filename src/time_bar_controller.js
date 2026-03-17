@@ -57,7 +57,8 @@ export function attachTimeBarController({
 
     // optional (safe defaults)
     getDataLoaded = () => true,
-    getSuppressCanvasClicks = () => false
+    getSuppressCanvasClicks = () => false,
+    getRestrictSelectionsToStrokes = () => false
 }) {
 
     // ---------------------------------------------------------
@@ -98,6 +99,77 @@ export function attachTimeBarController({
     // ---------------------------------------------------------
     function haveData() {
         return !!getDataLoaded?.() && Array.isArray(T) && T.length > 1;
+    }
+
+    function restrictToStrokes() {
+        return !!getRestrictSelectionsToStrokes?.();
+    }
+
+    function getStrokeRunBounds(i) {
+        if (!Array.isArray(Tip) || !Tip.length) return null;
+        if (!Number.isFinite(i) || i < 0 || i >= Tip.length) return null;
+        if (Tip[i] !== 1) return null;
+
+        let i0 = i;
+        let i1 = i;
+
+        while (i0 > 0 && Tip[i0 - 1] === 1) i0--;
+        while (i1 + 1 < Tip.length && Tip[i1 + 1] === 1) i1++;
+
+        return { i0, i1 };
+    }
+
+    function clampIndexToRun(i, run) {
+        if (!run || !Number.isFinite(i)) return i;
+        return Math.max(run.i0, Math.min(run.i1, i));
+    }
+
+    function nearestStrokeBoundaryIndexFromPixel(rawX, leftPad, barWidth, tMin, tMax) {
+        if (!restrictToStrokes()) return null;
+        if (!Array.isArray(T) || !T.length || !Array.isArray(Tip) || Tip.length !== T.length) {
+            return null;
+        }
+
+        const tolPx = 6;
+        let bestI = null;
+        let bestDx = Infinity;
+
+        for (let i = 0; i < Tip.length; i++) {
+            if (Tip[i] !== 1) continue;
+
+            const isRunStart = (i === 0 || Tip[i - 1] !== 1);
+            const isRunEnd   = (i === Tip.length - 1 || Tip[i + 1] !== 1);
+
+            if (!isRunStart && !isRunEnd) continue;
+
+            const x =
+                leftPad + (T[i] - tMin) / (tMax - tMin) * barWidth;
+
+            const dx = Math.abs(rawX - x);
+            if (dx < bestDx) {
+                bestDx = dx;
+                bestI = i;
+            }
+        }
+
+        return bestDx <= tolPx ? bestI : null;
+    }
+
+    function resolveStrokeSafeAnchorIndex(rawX, x, leftPad, barWidth, tMin, tMax) {
+        const rawT = pixelToTime(x, leftPad, barWidth, tMin, tMax);
+        const nearestI = Select.nearestSampleIndex(T, rawT);
+
+        if (Number.isFinite(nearestI) && Tip[nearestI] === 1) {
+            return nearestI;
+        }
+
+        return nearestStrokeBoundaryIndexFromPixel(
+            rawX,
+            leftPad,
+            barWidth,
+            tMin,
+            tMax
+        );
     }
 
     function clearDragState() {
@@ -663,15 +735,38 @@ export function attachTimeBarController({
                 T
             )
         ) {
+            let anchorIndex = null;
+            let tStart = pixelToTime(x, leftPad, barWidth, tMin, tMax);
+
+            if (restrictToStrokes()) {
+                anchorIndex = resolveStrokeSafeAnchorIndex(
+                    rawX,
+                    x,
+                    leftPad,
+                    barWidth,
+                    tMin,
+                    tMax
+                );
+
+            if (!Number.isFinite(anchorIndex)) {
+                clearDragState();
+                canvas.style.cursor = "default";
+                return;
+            }
+
+                tStart = T[anchorIndex];
+            } else {
+                anchorIndex = Select.resolveLeftBoundaryIndex(T, tStart);
+            }
+
             dragging   = true;
             dragStartX = x;
 
-            const tStart = pixelToTime(dragStartX, leftPad, barWidth, tMin, tMax);
             dragRawTime      = tStart;
             dragLastRawTime  = tStart;
             dragDirection    = 0;
-            dragAnchorIndex  = Select.resolveLeftBoundaryIndex(T, tStart);
-            dragSnappedIndex = dragAnchorIndex;
+            dragAnchorIndex  = anchorIndex;
+            dragSnappedIndex = anchorIndex;
 
             tempSelection = null;
             deleteTarget  = null;
@@ -951,10 +1046,21 @@ export function attachTimeBarController({
                 : boundaryIndexForRawTime(rawT, "left");
 
             if (Number.isFinite(previewI)) {
+                let constrainedI = previewI;
+
+                if (restrictToStrokes()) {
+                    const fixedI = Number.isFinite(draggingStartHandle?.i1)
+                        ? draggingStartHandle.i1
+                        : Select.resolveRightBoundaryIndex(T, draggingStartHandle?.t1);
+
+                    const run = getStrokeRunBounds(fixedI);
+                    constrainedI = clampIndexToRun(constrainedI, run);
+                }
+
                 const clampedI = Select.clampLeftHandleIndex(
                     selections,
                     draggingStartHandle,
-                    previewI,
+                    constrainedI,
                     T
                 );
 
@@ -994,10 +1100,21 @@ export function attachTimeBarController({
                 : boundaryIndexForRawTime(rawT, "right");
 
             if (Number.isFinite(previewI)) {
+                let constrainedI = previewI;
+
+                if (restrictToStrokes()) {
+                    const fixedI = Number.isFinite(draggingEndHandle?.i0)
+                        ? draggingEndHandle.i0
+                        : Select.resolveLeftBoundaryIndex(T, draggingEndHandle?.t0);
+
+                    const run = getStrokeRunBounds(fixedI);
+                    constrainedI = clampIndexToRun(constrainedI, run);
+                }
+
                 const clampedI = Select.clampRightHandleIndex(
                     selections,
                     draggingEndHandle,
-                    previewI,
+                    constrainedI,
                     T
                 );
 
@@ -1040,6 +1157,11 @@ export function attachTimeBarController({
             let currI = updateHystereticSnap(rawT, movingSide);
             if (!Number.isFinite(currI)) {
                 currI = forceNearestSnap(rawT, movingSide);
+            }
+
+            if (restrictToStrokes()) {
+                const run = getStrokeRunBounds(dragAnchorIndex);
+                currI = clampIndexToRun(currI, run);
             }
 
             currI = Select.clampNewSelectionIndex(

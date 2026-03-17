@@ -102,13 +102,27 @@ export function attachXYController({
     // ---------------------------------------------------------
     // Commit logic (DELEGATED)
     // ---------------------------------------------------------
+    function restrictRangesIfNeeded(ranges) {
+        if (!AppState.display?.segmentation?.restrictToStrokes) {
+            return ranges;
+        }
+
+        return Select.restrictTimeRangesToStrokeRuns(
+            ranges,
+            AppState.T,
+            AppState.Tip
+        );
+    }
+
     function commitXYSelection() {
-        if (!tempTimeRanges || tempTimeRanges.length === 0) return;
+        const ranges = restrictRangesIfNeeded(tempTimeRanges);
+        if (!ranges || ranges.length === 0) return;
 
         Select.applySelectionRanges({
             getSelections: () => AppState.selections,
             setSelections,
-            ranges: tempTimeRanges
+            ranges,
+            T: AppState.T
         });
 
         resetSelection();
@@ -267,7 +281,9 @@ export function attachXYController({
                 break;
         }
 
-        tempTimeRanges = computeTimeRangesFromXYBox(selectBox);
+        tempTimeRanges = restrictRangesIfNeeded(
+            computeTimeRangesFromXYBox(selectBox)
+        );
 
         renderers.requestFull();
     });
