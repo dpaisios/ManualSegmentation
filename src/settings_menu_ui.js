@@ -353,7 +353,7 @@ export function createManualMappingMenuUI({
     setActiveSuggestionKey,
 
     updateManualMappingUI,
-    updateTitleBarSettingsError,
+    updateTitleBarIssues,
     pulseManualFieldError,
 
     applyColumnSelection,
@@ -464,6 +464,7 @@ export function createManualMappingMenuUI({
             closeSuggestionList();
             validateManualMappings();
             updateManualMappingUI();
+            updateTitleBarIssues();
             maybeShowSuggestions(key, input);
         });
 
@@ -805,7 +806,7 @@ export function createManualMappingMenuUI({
             closeChooserModal();
             validateManualMappings();
             updateManualMappingUI();
-            updateTitleBarSettingsError();
+            updateTitleBarIssues();
         });
 
         validateBtn.addEventListener("click", () => {
@@ -904,9 +905,11 @@ export function createManualMappingMenuUI({
 
             if (mm.expanded) {
                 syncManualMappingPreviewFromDetected();
+                validateManualMappings();
             }
 
             updateManualMappingUI();
+            updateTitleBarIssues();
         });
 
         top.addEventListener("mousedown", e => {

@@ -126,13 +126,14 @@ function collectMissingCriticalMappingIssues({
     ];
 }
 
-function collectCriticalManualMappingIssues({
+function collectManualMappingIssues({
     manualMapping,
     criticalKeys
 }) {
     const buckets = new Map();
+    const allKeys = Object.keys(manualMapping?.errors ?? {});
 
-    for (const key of criticalKeys) {
+    for (const key of allKeys) {
         const msg = String(manualMapping?.errors?.[key] ?? "").trim();
         if (!msg) continue;
 
@@ -149,7 +150,6 @@ function collectCriticalManualMappingIssues({
 
         // Special handling: duplicate column assignment
         if (msg === "This column is already assigned to another variable") {
-
             const colNames = new Set();
 
             for (const v of vars) {
@@ -174,11 +174,32 @@ function collectCriticalManualMappingIssues({
             }
         }
 
-        // Default behaviour
+        // Special handling: invalid column names
+        if (msg === "Column name not found") {
+
+            const isCritical = vars.some(v => criticalKeys.includes(v));
+
+            out.push(
+                normalizeIssue({
+                    level: isCritical ? "error" : "warning",
+                    code: "invalid-column-name",
+                    scope: "manual-mapping",
+                    keys: vars,
+                    message: `Invalid variable mappings: ${vars.join(", ")}`
+                })
+            );
+
+            continue;
+        }
+
+        const isCritical = vars.some(v => criticalKeys.includes(v));
+
         out.push(
             normalizeIssue({
-                level: "error",
-                code: "critical-manual-mapping-error",
+                level: isCritical ? "error" : "warning",
+                code: isCritical
+                    ? "critical-manual-mapping-error"
+                    : "manual-mapping-warning",
                 scope: "manual-mapping",
                 keys: vars,
                 message:
@@ -277,7 +298,7 @@ export function collectAppIssues({
             manualMapping,
             criticalKeys
         }),
-        ...collectCriticalManualMappingIssues({
+        ...collectManualMappingIssues({
             manualMapping,
             criticalKeys
         }),
