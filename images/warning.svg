@@ -8,7 +8,7 @@
    version="1.1"
    id="svg1"
    xml:space="preserve"
-   sodipodi:docname="warning_yellow.svg"
+   sodipodi:docname="warning.svg"
    inkscape:version="1.4 (86a8ad7, 2024-10-11)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -23,12 +23,12 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="6.0224666"
-     inkscape:cx="-5.1473926"
-     inkscape:cy="36.612905"
-     inkscape:window-width="1920"
-     inkscape:window-height="1009"
-     inkscape:window-x="-8"
+     inkscape:zoom="8.5170539"
+     inkscape:cx="-19.020662"
+     inkscape:cy="20.84054"
+     inkscape:window-width="3440"
+     inkscape:window-height="1369"
+     inkscape:window-x="1432"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
      inkscape:current-layer="g2" /><defs
@@ -44,14 +44,14 @@
    id="circle1" />
 	<path
    d="m -67.162668,51.523853 v 0 c -0.242867,0 -0.442656,-0.191255 -0.453327,-0.433721 l -0.41825,-4.036731 c -0.03801,-0.507075 0.363034,-0.939463 0.871577,-0.939463 v 0 c 0.508543,0 0.909588,0.432388 0.871578,0.939463 l -0.418384,4.036731 c -0.01056,0.2426 -0.210326,0.433721 -0.453194,0.433721 z"
-   style="opacity:1;fill:#131009;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:0.727473;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:10;stroke-dasharray:none;stroke-opacity:1"
+   style="opacity:1;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:0.19569441;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:10;stroke-dasharray:none;stroke-opacity:1"
    stroke-linecap="round"
    id="path1" />
 	<circle
    cx="-67.162666"
    cy="52.884365"
    r="0.72286916"
-   style="opacity:1;fill:#131009;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:0.727473;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:10;stroke-dasharray:none;stroke-opacity:1"
+   style="opacity:1;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:0.19569441;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:10;stroke-dasharray:none;stroke-opacity:1"
    id="circle2" />
 	
 </g></svg>

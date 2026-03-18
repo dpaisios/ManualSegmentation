@@ -8,7 +8,8 @@ import {
     pixelToTime,
     getHandleSizes,
     getTimeBoundsFromT,
-    isPixelInsideAnySelection
+    isPixelInsideAnySelection,
+    nearestStrokeBoundaryIndexFromPixel
 } from "./time_bar_geom.js";
 
 import * as TB from "./time_bar.js";
@@ -124,37 +125,6 @@ export function attachTimeBarController({
         return Math.max(run.i0, Math.min(run.i1, i));
     }
 
-    function nearestStrokeBoundaryIndexFromPixel(rawX, leftPad, barWidth, tMin, tMax) {
-        if (!restrictToStrokes()) return null;
-        if (!Array.isArray(T) || !T.length || !Array.isArray(Tip) || Tip.length !== T.length) {
-            return null;
-        }
-
-        const tolPx = 6;
-        let bestI = null;
-        let bestDx = Infinity;
-
-        for (let i = 0; i < Tip.length; i++) {
-            if (Tip[i] !== 1) continue;
-
-            const isRunStart = (i === 0 || Tip[i - 1] !== 1);
-            const isRunEnd   = (i === Tip.length - 1 || Tip[i + 1] !== 1);
-
-            if (!isRunStart && !isRunEnd) continue;
-
-            const x =
-                leftPad + (T[i] - tMin) / (tMax - tMin) * barWidth;
-
-            const dx = Math.abs(rawX - x);
-            if (dx < bestDx) {
-                bestDx = dx;
-                bestI = i;
-            }
-        }
-
-        return bestDx <= tolPx ? bestI : null;
-    }
-
     function resolveStrokeSafeAnchorIndex(rawX, x, leftPad, barWidth, tMin, tMax) {
         const rawT = pixelToTime(x, leftPad, barWidth, tMin, tMax);
         const nearestI = Select.nearestSampleIndex(T, rawT);
@@ -163,12 +133,17 @@ export function attachTimeBarController({
             return nearestI;
         }
 
+        if (!restrictToStrokes()) return null;
+
         return nearestStrokeBoundaryIndexFromPixel(
             rawX,
+            T,
+            Tip,
             leftPad,
             barWidth,
             tMin,
-            tMax
+            tMax,
+            20
         );
     }
 

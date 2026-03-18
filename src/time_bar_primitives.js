@@ -7,7 +7,9 @@
 import {
     timeBarGeom,
     getHandleSizes,
-    getDeleteBubbleSize
+    getDeleteBubbleSize,
+    getVisualRunSpanX,
+    sampleIndexX
 } from "./time_bar_geom.js";
 
 export const CLUSTER_GAP = 6;
@@ -42,19 +44,46 @@ export function drawTriangle(ctx, x, y, side, direction, lineWidth = 2) {
 // Time-bar subsegment drawing (Tip-colored)
 // -------------------------------------------------------------
 export function drawTimeSubSegment(
-    ctx, T,
+    ctx, T, Tip,
     iStart, iEnd, tipVal,
     leftPad, barWidth, barY0, barY1,
     tMin, tMax
 ) {
-    const t0 = T[iStart];
-    const t1 = T[iEnd];
+    if (!Array.isArray(T) || T.length === 0) return;
+    if (!Array.isArray(Tip) || Tip.length !== T.length) return;
+    if (!Number.isFinite(iStart) || !Number.isFinite(iEnd)) return;
 
-    const rel0 = (t0 - tMin) / (tMax - tMin);
-    const rel1 = (t1 - tMin) / (tMax - tMin);
+    const n = T.length;
 
-    const x0 = leftPad + rel0 * barWidth;
-    const x1 = leftPad + rel1 * barWidth;
+    const i0 = Math.max(0, Math.min(n - 1, iStart | 0));
+    const i1 = Math.max(i0, Math.min(n - 1, iEnd   | 0));
+
+    let x0, x1;
+
+    // Always use interval geometry
+    x0 = sampleIndexX(T, i0, leftPad, barWidth, tMin, tMax);
+    x1 = sampleIndexX(T, i1, leftPad, barWidth, tMin, tMax);
+
+    // Singleton exception ONLY for blue
+    if (tipVal === 1 && i0 === i1) {
+        const span = getVisualRunSpanX(
+            T,
+            Tip,
+            i0,
+            i1,
+            leftPad,
+            barWidth,
+            tMin,
+            tMax
+        );
+
+        if (span) {
+            x0 = span.x0;
+            x1 = span.x1;
+        }
+    }
+
+    if (!(x1 > x0)) return;
 
     ctx.fillStyle =
         (tipVal === 1)

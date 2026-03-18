@@ -6,7 +6,11 @@
 import {
     timeBarGeom,
     getIndexRange,
-    getHandleSizes
+    getHandleSizes,
+    sampleIndexX,
+    getStrokeVisualSegments,
+    getVisualRunSpanX,
+    getSelectionIntervalSegments
 } from "./time_bar_geom.js";
 
 import {
@@ -245,44 +249,53 @@ export function drawTimeBar(
         return leftPad + (t - tMin) / (tMax - tMin) * barWidth;
     }
 
-    // ---------------------------------------------------------
-    // 1) Base Tip-coloured background
-    // ---------------------------------------------------------
-    let segStart = 0;
-    let lastTip  = Tip[0];
+    function fillIndexRange(i0, i1, color) {
+        if (!Number.isFinite(i0) || !Number.isFinite(i1)) return;
+        if (i1 < i0) return;
 
-    for (let i = 1; i < T.length; i++) {
-        if (Tip[i] !== lastTip) {
-            const x0 = timeToX(T[segStart]);
-            const x1 = timeToX(T[i]);
+        const span = getVisualRunSpanX(
+            T,
+            Tip,
+            i0,
+            i1,
+            leftPad,
+            barWidth,
+            tMin,
+            tMax
+        );
 
-            ctx.fillStyle = (lastTip === 0) ? "#bbb" : "#acacacff";
-            ctx.fillRect(x0, barY0, x1 - x0, barY1 - barY0);
+        if (!span) return;
 
-            segStart = i;
-            lastTip  = Tip[i];
-        }
+        ctx.fillStyle = color;
+        ctx.fillRect(span.x0, barY0, span.x1 - span.x0, barY1 - barY0);
     }
 
-    {
-        const x0 = timeToX(T[segStart]);
-        const x1 = timeToX(T[T.length - 1]);
+    const strokeVisualSegments = getStrokeVisualSegments(Tip);
 
-        ctx.fillStyle = (lastTip === 0) ? "#bbb" : "#acacacff";
-        ctx.fillRect(x0, barY0, x1 - x0, barY1 - barY0);
+    // ---------------------------------------------------------
+    // 1) Base background
+    // Rule:
+    // - light gray everywhere
+    // - dark gray only on visual stroke segments
+    // ---------------------------------------------------------
+    ctx.fillStyle = "#bbb";
+    ctx.fillRect(leftPad, barY0, barWidth, barY1 - barY0);
+
+    for (const s of strokeVisualSegments) {
+        fillIndexRange(s.i0, s.i1, "#acacacff");
     }
 
-    // ---------------------------------------------------------
-    // 1.5) Velocity minima ticks
-    // ---------------------------------------------------------
-    drawVelocityMinimaTicks(
-        ctx,
-        velocityMinimaIdxs,
-        T,
-        timeToX,
-        barY0,
-        barY1
-    );
+        // ---------------------------------------------------------
+        // 1.5) Velocity minima ticks
+        // ---------------------------------------------------------
+        drawVelocityMinimaTicks(
+            ctx,
+            velocityMinimaIdxs,
+            T,
+            timeToX,
+            barY0,
+            barY1
+        );
 
     // ---------------------------------------------------------
     // 2) Ticks
@@ -330,32 +343,32 @@ export function drawTimeBar(
     function drawOneSelection(sel) {
         const span = selectionSpanTimes(sel, T);
 
-        let x0 = timeToX(span.tStart);
-        let x1 = timeToX(span.tEnd);
+        let x0 = sampleIndexX(T, span.i0, leftPad, barWidth, tMin, tMax);
+        let x1 = sampleIndexX(T, span.i1, leftPad, barWidth, tMin, tMax);
 
-        // Subsegments coloured by Tip using exact inclusive sample ownership
-        let lastTip  = Tip[span.i0];
-        let segStart = span.i0;
+        // Selection highlight
+        // Color ownership is defined on sample intervals [k, k+1]:
+        // - blue iff Tip[k] === 1 && Tip[k + 1] === 1
+        // - red otherwise
+        const intervalSegs = getSelectionIntervalSegments(Tip, span.i0, span.i1);
 
-        for (let i = span.i0 + 1; i <= span.i1; i++) {
-            if (Tip[i] !== lastTip) {
-                drawTimeSubSegment(
-                    ctx, T,
-                    segStart, i, lastTip,
-                    leftPad, barWidth, barY0, barY1,
-                    tMin, tMax
-                );
-                lastTip  = Tip[i];
-                segStart = i;
-            }
+        for (const s of intervalSegs.red) {
+            drawTimeSubSegment(
+                ctx, T, Tip,
+                s.i0, s.i1, 0,
+                leftPad, barWidth, barY0, barY1,
+                tMin, tMax
+            );
         }
 
-        drawTimeSubSegment(
-            ctx, T,
-            segStart, span.i1, lastTip,
-            leftPad, barWidth, barY0, barY1,
-            tMin, tMax
-        );
+        for (const s of intervalSegs.blue) {
+            drawTimeSubSegment(
+                ctx, T, Tip,
+                s.i0, s.i1, 1,
+                leftPad, barWidth, barY0, barY1,
+                tMin, tMax
+            );
+        }
 
         const baseColor  = "rgba(24,18,18,1)";
         const hoverColor = "rgba(119,115,107,1)";
