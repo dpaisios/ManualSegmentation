@@ -363,10 +363,10 @@ export function createManualMappingController({
         } else {
             mm.fields[key] = "";
             mm.resolved[key] = null;
-            mm.status[key] = "empty";
+            mm.status[key] = "auto";
             mm.errors[key] = "";
             mm.meta[key] = {
-                source: null,
+                source: "auto",
                 columnIndex: null
             };
         }
@@ -401,10 +401,10 @@ export function createManualMappingController({
             } else if (source === "auto") {
                 mm.fields[key] = "";
                 mm.resolved[key] = null;
-                mm.status[key] = "empty";
+                mm.status[key] = "auto";
                 mm.errors[key] = "";
                 mm.meta[key] = {
-                    source: null,
+                    source: "auto",
                     columnIndex: null
                 };
             }

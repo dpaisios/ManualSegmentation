@@ -35,32 +35,50 @@ const ROWID_KEY = "ManSeg_rowID";
 // -------------------------------------------------------------
 // Helpers
 // -------------------------------------------------------------
-function getActiveManualOverrides() {
+function getManualDetectionControl() {
     const mm = AppState.manualMapping;
-    if (!mm || !mm.enabled) return null;
 
-    const out = {};
-    let any = false;
+    if (!mm || !mm.enabled) {
+        return {
+            overrides: null,
+            blockedAuto: []
+        };
+    }
+
+    const overrides = {};
+    const blockedAuto = [];
+    let anyOverride = false;
 
     const vars = ["X", "Y", "Z", "t", "P", "v", "v_pits"];
 
     for (const key of vars) {
         const idx = mm?.resolved?.[key];
         const source = mm?.meta?.[key]?.source ?? null;
+        const text = String(mm?.fields?.[key] ?? "").trim();
 
-        // Only user-committed mappings lock detection.
-        // Auto fields must stay free so detection can rerun on them.
-        if (
-            source !== "auto" &&
-            typeof idx === "number" &&
-            idx >= 0
-        ) {
-            out[key] = idx;
-            any = true;
+        // auto mode => still eligible for auto-detection
+        if (source === "auto") {
+            continue;
+        }
+
+        // committed manual mapping => lock detection
+        if (typeof idx === "number" && idx >= 0) {
+            overrides[key] = idx;
+            anyOverride = true;
+            continue;
+        }
+
+        // manual mode, not auto, unresolved/empty => forbid auto-detection
+        if (text === "") {
+            blockedAuto.push(key);
+            continue;
         }
     }
 
-    return any ? out : null;
+    return {
+        overrides: anyOverride ? overrides : null,
+        blockedAuto
+    };
 }
 
 function hasDuplicateTimestampsInData(data) {
@@ -147,6 +165,78 @@ function getTipSource(settingsOptions) {
     }
 
     return "P";
+}
+
+function getAutoDetectedTipSource(data, detectedCols, colNames) {
+    const hasZ =
+        Number.isInteger(detectedCols?.Z) &&
+        detectedCols.Z >= 0 &&
+        detectedCols.Z < colNames.length;
+
+    const hasP =
+        Number.isInteger(detectedCols?.P) &&
+        detectedCols.P >= 0 &&
+        detectedCols.P < colNames.length;
+
+    if (hasZ && !hasP) return "Z";
+    if (!hasZ && hasP) return "P";
+    if (!hasZ && !hasP) return "P";
+
+    const zName = colNames[detectedCols.Z];
+    const pName = colNames[detectedCols.P];
+
+    let nonZeroZCount = 0;
+    let pZeroOnNonZeroZ = 0;
+
+    for (let i = 0; i < data.length; i++) {
+        const z = data[i]?.[zName];
+        const p = data[i]?.[pName];
+
+        if (Number.isFinite(z) && z !== 0) {
+            nonZeroZCount++;
+            if (p === 0) {
+                pZeroOnNonZeroZ++;
+            }
+        }
+    }
+
+    if (nonZeroZCount === 0) {
+        return "Z";
+    }
+
+    return (pZeroOnNonZeroZ / nonZeroZCount >= 0.95) ? "P" : "Z";
+}
+
+function getEffectiveTipSource(settingsOptions, data, detectedCols, colNames) {
+    const tipSourceOpt = settingsOptions?.find(o => o.label === "Tip source");
+
+    const pChild = tipSourceOpt?.children?.find(c => c.label === "P");
+    const zChild = tipSourceOpt?.children?.find(c => c.label === "Z");
+
+    const autoSource = getAutoDetectedTipSource(data, detectedCols, colNames);
+
+    // No UI/settings available: use auto-detected source
+    if (!tipSourceOpt?.children || !pChild || !zChild) {
+        return autoSource;
+    }
+
+    // Only treat Z as explicit if user moved away from default-P state.
+    // Default initial state is P checked, so that must not override auto.
+    if (zChild.checked && !pChild.checked) {
+        return "Z";
+    }
+
+    // Otherwise follow auto-detected source.
+    return autoSource;
+}
+
+function syncTipSourceSetting(settingsOptions, source) {
+    const tipSourceOpt = settingsOptions?.find(o => o.label === "Tip source");
+    if (!tipSourceOpt?.children) return;
+
+    for (const child of tipSourceOpt.children) {
+        child.checked = (child.label === source);
+    }
 }
 
 function getCriticalKeysForTipSource(tipSource) {
@@ -281,15 +371,17 @@ export function loadData(
     // ---------------------------------------------------------
     // Column detection + canonicalisation
     // ---------------------------------------------------------
-    const manualOverrides = getActiveManualOverrides();
+    const manualControl = getManualDetectionControl();
 
     const { detectedCols: cols, processedData } =
-        detectColumns(data, colNames, manualOverrides);
+        detectColumns(data, colNames, manualControl);
 
     detectedCols = cols;
 
     // Persist active manual overrides for current loaded dataset
-    AppState.activeManualOverrides = manualOverrides ? { ...manualOverrides } : {};
+    AppState.activeManualOverrides = manualControl.overrides
+        ? { ...manualControl.overrides }
+        : {};
 
     // Persist time column metadata for segmented import
     AppState.timeColIndex =
@@ -317,7 +409,15 @@ export function loadData(
 
     data = processedData;
 
-    const tipSource = getTipSource(settingsOptions);
+    const tipSource = getEffectiveTipSource(
+        settingsOptions,
+        data,
+        detectedCols,
+        colNames
+    );
+
+    syncTipSourceSetting(settingsOptions, tipSource);
+
     const drawableReady = hasAllCriticalMappings(detectedCols, tipSource);
 
     AppState.detectedCols = detectedCols;
@@ -342,6 +442,7 @@ export function loadData(
     }
 
     computeTipSeg(data, tipSource);
+    AppState.tipSource = tipSource;
 
     timeNormalization(data);
 

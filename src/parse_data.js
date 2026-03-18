@@ -41,7 +41,23 @@ export function parseData(rawText, fileName) {
     const delimiter = detectDelimiter(lines[0]);
 
     const first = splitLine(lines[0], delimiter);
-    const hasHeader = !first.every(isNumeric);
+    const second = lines.length > 1 ? splitLine(lines[1], delimiter) : [];
+
+    function countNumeric(arr){
+        let n = 0;
+        for(const v of arr){
+            if(isNumeric(v)) n++;
+        }
+        return n;
+    }
+
+    const n1 = countNumeric(first);
+    const n2 = countNumeric(second);
+
+    // Header only if second row is more numeric than first
+    const hasHeader =
+        second.length === first.length &&
+        n2 > n1;
 
     let header, startRow;
 
