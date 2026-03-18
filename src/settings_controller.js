@@ -125,6 +125,26 @@ export function attachSettingsController({
         titleBarController.setTitleIssues(issues);
     }
 
+    function updateMenuMaxHeight() {
+        if (!menuEl) return;
+
+        const timeCanvas = document.getElementById("timeCanvas");
+        if (!timeCanvas) return;
+
+        const menuRect = menuEl.getBoundingClientRect();
+        const timeRect = timeCanvas.getBoundingClientRect();
+
+        const maxHeight = timeRect.top - menuRect.top - 8;
+
+        if (maxHeight > 100) {
+            menuEl.style.maxHeight = `${maxHeight}px`;
+            menuEl.style.overflowY = "auto";
+        } else {
+            menuEl.style.maxHeight = "";
+            menuEl.style.overflowY = "";
+        }
+    }
+
     function syncVelocityMinimaSetting() {
         const opt = settingsOptions.find(o => o.label === "Show velocity minima");
         if (!opt) return;
@@ -204,6 +224,7 @@ export function attachSettingsController({
         updateRegularChecks(menuEl, settingsOptions);
         updateCheckboxGroupItems(menuEl, settingsOptions);
         updateTitleBarIssues();
+        updateMenuMaxHeight();
     }
 
     function toggleOption(index) {
@@ -215,6 +236,7 @@ export function attachSettingsController({
             opt.expanded = !opt.expanded;
             updateRegularChecks(menuEl, settingsOptions);
             updateCheckboxGroupItems(menuEl, settingsOptions);
+            updateMenuMaxHeight();
             return;
         }
 
@@ -226,6 +248,7 @@ export function attachSettingsController({
 
             updateRegularChecks(menuEl, settingsOptions);
             updateCheckboxGroupItems(menuEl, settingsOptions);
+            updateMenuMaxHeight();
             applySettingChange(opt);
             return;
         }
@@ -243,6 +266,7 @@ export function attachSettingsController({
 
         updateRegularChecks(menuEl, settingsOptions);
         updateCheckboxGroupItems(menuEl, settingsOptions);
+        updateMenuMaxHeight();
         applySettingChange(opt);
     }
 
@@ -266,6 +290,7 @@ export function attachSettingsController({
             });
 
             updateCheckboxGroupItems(menuEl, settingsOptions);
+            updateMenuMaxHeight();
             applySettingChange(opt);
             return;
         }
@@ -280,6 +305,7 @@ export function attachSettingsController({
             }
 
             updateCheckboxGroupItems(menuEl, settingsOptions);
+            updateMenuMaxHeight();
             resetXYSelection();
             renderers.requestFull();
         }
@@ -434,6 +460,7 @@ export function attachSettingsController({
 
         document.body.appendChild(menuEl);
         positionMenu();
+        updateMenuMaxHeight();
         scaleController.updateScaleUI();
         updateManualMappingUI();
         updateRegularChecks(menuEl, settingsOptions);
@@ -479,7 +506,10 @@ export function attachSettingsController({
     titleBarController.setSettingsHandler(toggleMenu);
 
     window.addEventListener("resize", () => {
-        if (menuEl) positionMenu();
+        if (menuEl) {
+            positionMenu();
+            updateMenuMaxHeight();
+        }
     });
 
     validateManualMappings();
