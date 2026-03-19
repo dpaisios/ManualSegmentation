@@ -458,34 +458,25 @@ export function drawXYFromSelections(
 function drawConfirmBubble(ctx, cx, cy, r) {
     ctx.save();
 
-    // Stronger, cleaner elevation
-    ctx.shadowColor = "rgba(0,0,0,0.35)";
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetY = 3;
+    // reset any inherited dashed state
+    ctx.setLineDash([]);
 
-    // High-contrast fill (works on light & dark backgrounds)
-    ctx.fillStyle = "#2ecc71"; // keep green, but solid
-
+    // glow
+    ctx.strokeStyle = "rgba(43,176,166,0.25)";
+    ctx.lineWidth = 6;
+    ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fill();
-
-    // White outline for separation from dimmed background
-    ctx.shadowColor = "transparent";
-    ctx.strokeStyle = "white";
-    ctx.lineWidth = 1.25;
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
     ctx.stroke();
 
-    // Checkmark
-    ctx.strokeStyle = "white";
+    // crisp core
+    ctx.strokeStyle = "rgba(43,176,166,0.95)";
     ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
     ctx.beginPath();
-    ctx.moveTo(cx - r * 0.45, cy);
-    ctx.lineTo(cx - r * 0.1,  cy + r * 0.35);
-    ctx.lineTo(cx + r * 0.45, cy - r * 0.35);
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
     ctx.stroke();
 
     ctx.restore();
