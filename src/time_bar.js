@@ -427,7 +427,7 @@ export function drawTimeBar(
     // ---------------------------------------------------------
     // 4) Split preview line
     // ---------------------------------------------------------
-    if (splitState?.active && splitState?.t != null) {
+    if (splitState?.active && splitState?.t != null && Number.isFinite(splitState?.i)) {
         const xp = Math.round(timeToX(splitState.t)) + 0.5;
 
         ctx.save();

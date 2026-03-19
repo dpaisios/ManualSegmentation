@@ -217,26 +217,19 @@ export function drawXYHighlight(
 // Split marker (perpendicular to curve)
 // -------------------------------------------------------------
 function drawPerpSplitMarker(
-    ctx, X, Y, T,
-    tSplit,
+    ctx, X, Y,
+    iSplit,
     transform, W, H
 ) {
-    if (tSplit == null) return;
-    if (!T || T.length < 3) return;
+    if (!Number.isFinite(iSplit)) return;
+    if (!Array.isArray(X) || !Array.isArray(Y)) return;
+    if (X.length < 3 || Y.length < 3) return;
+    if (iSplit < 0 || iSplit >= X.length) return;
 
-    // nearest index
-    let i = 0;
-    let best = Infinity;
-    for (let k = 0; k < T.length; k++) {
-        const d = Math.abs(T[k] - tSplit);
-        if (d < best) {
-            best = d;
-            i = k;
-        }
-    }
+    const i = iSplit;
 
     const i0 = Math.max(0, i - 3);
-    const i1 = Math.min(T.length - 1, i + 3);
+    const i1 = Math.min(X.length - 1, i + 3);
 
     const x0 = X[i0], y0 = Y[i0];
     const x1 = X[i1], y1 = Y[i1];
@@ -250,17 +243,10 @@ function drawPerpSplitMarker(
     vx /= len;
     vy /= len;
 
-    // perpendicular in data space
     let nx = -vy;
     let ny =  vx;
 
-    const px = toCanvasX(X[i], transform);
-    const py = toCanvasY(Y[i], H, transform);
-
-    // scale normal into screen space (approx)
-    const L = 10; // px half-length
-    // convert a tiny step in data space to screen to estimate scale
-    // (use transform.scale)
+    const L = 10;
     const sx = nx * (L / transform.scale);
     const sy = ny * (L / transform.scale);
 
@@ -271,16 +257,16 @@ function drawPerpSplitMarker(
     const by = toCanvasY(Y[i] + sy, H, transform);
 
     ctx.save();
+    ctx.setLineDash([]);
 
-    // glow
     ctx.strokeStyle = "rgba(43,176,166,0.25)";
     ctx.lineWidth = 6;
+    ctx.lineCap = "round";
     ctx.beginPath();
     ctx.moveTo(ax, ay);
     ctx.lineTo(bx, by);
     ctx.stroke();
 
-    // crisp core
     ctx.strokeStyle = "rgba(43,176,166,0.95)";
     ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
@@ -422,10 +408,11 @@ export function drawXYFromSelections(
     // ---------------------------------------------------------
     // 4) Split marker
     // ---------------------------------------------------------
-    if (splitting && splitState.t != null) {
+    if (splitting && Number.isFinite(splitState.i)) {
         drawPerpSplitMarker(
-            ctx, X, Y, T,
-            splitState.t,
+            ctx,
+            X, Y,
+            splitState.i,
             transform, canvasWidth, canvasHeight
         );
     }

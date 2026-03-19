@@ -85,9 +85,12 @@ export function attachTimeBarController({
     let hoveredCommentTarget = null;
 
     // Split mode
-    let splitMode    = false;
-    let splitTarget  = null;    // sel | null
-    let splitTime    = null;    // number | null (hover)
+    let splitMode         = false;
+    let splitTarget       = null;    // sel | null
+    let splitTime         = null;    // snapped preview time
+    let splitSnappedIndex = null;    // snapped preview sample index
+    let splitLastRawTime  = null;    // previous raw hover time
+    let splitDirection    = 0;       // -1 | 0 | +1
 
     // Merging
     let draggingMerge = false;
@@ -169,9 +172,12 @@ export function attachTimeBarController({
     }
 
     function exitSplitMode() {
-        splitMode   = false;
-        splitTarget = null;
-        splitTime   = null;
+        splitMode         = false;
+        splitTarget       = null;
+        splitTime         = null;
+        splitSnappedIndex = null;
+        splitLastRawTime  = null;
+        splitDirection    = 0;
     }
 
     function barHit(x, y) {
@@ -341,6 +347,54 @@ export function attachTimeBarController({
         };
     }
 
+    function updateSplitDirection(rawT) {
+        if (!Number.isFinite(rawT)) return;
+
+        if (Number.isFinite(splitLastRawTime)) {
+            if (rawT > splitLastRawTime) splitDirection = +1;
+            else if (rawT < splitLastRawTime) splitDirection = -1;
+        }
+
+        splitLastRawTime = rawT;
+    }
+
+    function expandDuplicateRun(i) {
+        if (!Number.isFinite(i)) return null;
+
+        let i0 = i;
+        let i1 = i;
+
+        while (i0 > 0 && T[i0 - 1] === T[i]) i0--;
+        while (i1 + 1 < T.length && T[i1 + 1] === T[i]) i1++;
+
+        return { i0, i1 };
+    }
+
+    function resolveDirectionalSplitIndex(rawT, bounds = null) {
+        if (!Number.isFinite(rawT)) return null;
+
+        const nearestI = Select.nearestSampleIndex(T, rawT);
+        if (!Number.isFinite(nearestI)) return null;
+
+        const run = expandDuplicateRun(nearestI);
+        if (!run) return nearestI;
+
+        let i;
+        if (run.i0 === run.i1) {
+            i = nearestI;
+        } else if (splitDirection > 0) {
+            i = run.i0;   // moving right -> first duplicate
+        } else {
+            i = run.i1;   // moving left or no direction -> last duplicate
+        }
+
+        if (bounds) {
+            i = Math.max(bounds.i0, Math.min(bounds.i1, i));
+        }
+
+        return i;
+    }
+
     // ESC exits split mode (recommended UX)
     window.addEventListener("keydown", e => {
         if (e.key === "Escape" && splitMode) {
@@ -450,23 +504,16 @@ export function attachTimeBarController({
         if (splitMode) {
 
             // Convert click to bar + time if applicable
-            let tClick = null;
-            if (barClickable) {
-                tClick = pixelToTime(x, leftPad, barWidth, tMin, tMax);
-            }
-
-            // CASE 1 — Click INSIDE active selection → validate split
+            // CASE 1 — Click on a valid snapped split sample → validate split
             if (
                 barClickable &&
                 splitTarget &&
-                tClick != null &&
-                tClick > splitTarget.t0 &&
-                tClick < splitTarget.t1
+                Number.isFinite(splitSnappedIndex)
             ) {
-                const next = Select.splitSelection(
+                const next = Select.splitSelectionAtIndex(
                     selections,
                     splitTarget,
-                    tClick,
+                    splitSnappedIndex,
                     T
                 );
 
@@ -521,9 +568,12 @@ export function attachTimeBarController({
             if ((sel.bubbleAlpha ?? 0) <= 0.01) continue;
 
             if (hitTestClusterSplit(ctx, x, y, sel, T, canvas.width, canvas.height)) {
-                splitMode   = true;
-                splitTarget = sel;
-                splitTime   = null;
+                splitMode         = true;
+                splitTarget       = sel;
+                splitTime         = null;
+                splitSnappedIndex = null;
+                splitLastRawTime  = null;
+                splitDirection    = 0;
 
                 clearDragState();
                 clearHoverState();
@@ -786,15 +836,29 @@ export function attachTimeBarController({
             deleteTarget  = splitTarget;
 
             const insideBar = (y >= barY0 && y <= barY1);
+
             if (insideBar && splitTarget) {
-                let t = pixelToTime(x, leftPad, barWidth, tMin, tMax);
+                const rawT = pixelToTime(x, leftPad, barWidth, tMin, tMax);
+                updateSplitDirection(rawT);
 
-                if (t < splitTarget.t0) t = splitTarget.t0;
-                if (t > splitTarget.t1) t = splitTarget.t1;
+                const bounds = getSelectionIndexBounds(splitTarget);
+                const i = resolveDirectionalSplitIndex(rawT, bounds);
 
-                splitTime = t;
-                canvas.style.cursor = "col-resize";
+                if (
+                    Number.isFinite(i) &&
+                    i > bounds.i0 &&
+                    i < bounds.i1
+                ) {
+                    splitSnappedIndex = i;
+                    splitTime = T[i];
+                    canvas.style.cursor = "col-resize";
+                } else {
+                    splitSnappedIndex = null;
+                    splitTime = null;
+                    canvas.style.cursor = "default";
+                }
             } else {
+                splitSnappedIndex = null;
                 splitTime = null;
                 canvas.style.cursor = "default";
             }
@@ -1308,6 +1372,9 @@ export function attachTimeBarController({
 
         if (splitMode) {
             splitTime = null;
+            splitSnappedIndex = null;
+            splitLastRawTime = null;
+            splitDirection = 0;
             canvas.style.cursor = "default";
             renderers.requestFull();
             return;
@@ -1346,7 +1413,8 @@ export function attachTimeBarController({
                 return {
                     active: splitMode,
                     sel: splitTarget,
-                    t: splitTime
+                    t: splitTime,
+                    i: splitSnappedIndex
                 };
             },
 

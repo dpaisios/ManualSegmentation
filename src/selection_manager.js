@@ -294,17 +294,15 @@ export function addOrMergeSelectionIndexRanges(selections, ranges, T) {
 // - validates by click in time bar
 // - uses index-based guard if T is provided
 // -------------------------------------------------------------
-export function splitSelection(selections, targetSel, tSplit, T) {
+export function splitSelectionAtIndex(selections, targetSel, splitI, T) {
     if (!targetSel) return selections;
     if (!Array.isArray(T) || T.length < 2) return selections;
-
-    const base = getSelectionRange(targetSel, T);
-    const splitI = nearestSampleIndex(T, tSplit);
-
     if (!Number.isFinite(splitI)) return selections;
 
+    const base = getSelectionRange(targetSel, T);
+
     // Need at least one sample on each side.
-    // Shared boundary sample is intentional, so:
+    // Shared boundary sample is intentional:
     // left  = [i0 ... splitI]
     // right = [splitI ... i1]
     if (splitI <= base.a0 || splitI >= base.a1) return selections;
@@ -347,6 +345,12 @@ export function splitSelection(selections, targetSel, tSplit, T) {
         });
 
     return ID.withRecomputedAutoIDs(next);
+}
+
+export function splitSelection(selections, targetSel, tSplit, T) {
+    if (!Array.isArray(T) || T.length < 2) return selections;
+    const splitI = nearestSampleIndex(T, tSplit);
+    return splitSelectionAtIndex(selections, targetSel, splitI, T);
 }
 
 export function mergeSelectionsByEnvelope(
